@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Slop Pacer</title>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="popup-header">
+        <h1 id="view-title">Slop Pacer</h1>
+        <nav class="header-actions" aria-label="Extension views">
+          <button id="home" type="button" aria-label="Overview" title="Overview" aria-current="page">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 11 8-7 8 7" /><path d="M6 10v10h12V10M10 20v-6h4v6" /></svg>
+          </button>
+          <button id="details" type="button" aria-label="History" title="History">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l-3 2" /></svg>
+          </button>
+          <button id="settings" type="button" aria-label="Settings" title="Settings">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.55V21h-4v-.08A1.7 1.7 0 0 0 8.97 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1.03H3v-4h.05A1.7 1.7 0 0 0 4.6 8.94a1.7 1.7 0 0 0-.34-1.88L4.2 7l2.83-2.83.06.06A1.7 1.7 0 0 0 8.97 4.6 1.7 1.7 0 0 0 10 3.05V3h4v.05a1.7 1.7 0 0 0 1.03 1.55 1.7 1.7 0 0 0 1.88-.34l.06-.06L19.8 7l-.06.06a1.7 1.7 0 0 0-.34 1.88A1.7 1.7 0 0 0 20.95 10H21v4h-.05A1.7 1.7 0 0 0 19.4 15Z" /></svg>
+          </button>
+          <button id="howto" type="button" aria-label="How Slop Pacer works" title="How it works">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M9.8 9a2.4 2.4 0 1 1 3.4 2.2c-.8.4-1.2.9-1.2 1.8" /><path d="M12 17h.01" /></svg>
+          </button>
+        </nav>
+        <button id="refresh" class="header-refresh" type="button" aria-label="Refresh usage" title="Refresh">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.34 5.66M20 4v7h-7" /></svg>
+        </button>
+      </header>
+      <div id="overview-view" class="popup-view">
+        <section class="summary" aria-label="Combined budget">
+          <div class="summary-top">
+            <div><strong id="combined-used">—</strong><span id="combined-limit">of —</span></div>
+            <span id="summary-days" class="summary-days">Current month</span>
+          </div>
+          <div class="summary-metrics">
+            <span id="combined-remaining" class="summary-remaining">No usage yet</span>
+            <span id="summary-pacing" class="summary-pacing">No pacing yet</span>
+          </div>
+          <div class="usage-bar summary-bar" role="progressbar" aria-label="Combined budget used"><span id="combined-bar"></span></div>
+        </section>
+        <section id="providers" aria-label="Providers"></section>
+      </div>
+
+      <section id="history-view" class="popup-view subview" hidden>
+        <div id="history-tabs" class="segmented-control" role="tablist" aria-label="History provider"></div>
+        <div id="history-list" class="history-list"></div>
+        <p class="view-note">Daily usage stored locally for the retained period.</p>
+      </section>
+
+      <section id="settings-view" class="popup-view subview" hidden>
+        <form id="budget-form" class="popup-form">
+          <div class="form-group">
+            <h2>Monthly budgets</h2>
+            <label>Claude <span class="money-input"><span>$</span><input name="claude" type="number" min="0" step="1" /></span></label>
+            <label>ChatGPT <span class="money-input"><span>$</span><input name="chatgpt" type="number" min="0" step="1" /></span></label>
+            <label>Cursor <span class="money-input"><span>$</span><input name="cursor" type="number" min="0" step="1" /></span></label>
+          </div>
+          <div class="form-group">
+            <h2>Preferences</h2>
+            <label>Refresh every <span class="suffix-input"><input name="syncMinutes" type="number" min="1" max="1440" step="1" /><span>minutes</span></span></label>
+            <label>Keep history <span class="suffix-input"><input name="retentionMonths" type="number" min="1" max="24" step="1" /><span>months</span></span></label>
+          </div>
+          <button class="primary-button" type="submit">Save changes</button>
+          <output id="save-status" aria-live="polite"></output>
+        </form>
+        <div class="data-actions">
+          <button id="export" type="button">Export JSON</button>
+          <button id="reset" class="danger-button" type="button">Clear history</button>
+        </div>
+      </section>
+
+      <section id="howto-view" class="popup-view subview howto-view" hidden>
+        <div class="howto-content">
+          <section>
+            <h2>Collects account usage</h2>
+            <p>Slop Pacer checks Claude, ChatGPT, and Cursor at your chosen interval (15 minutes by default) using your signed-in browser sessions. When needed, it briefly opens an inactive Usage tab and closes only the tab it created.</p>
+          </section>
+          <section>
+            <h2>Tracks month to date</h2>
+            <p>Usage is normalized against each monthly budget. Cursor is always opened with a first-of-month through today date range.</p>
+          </section>
+          <section>
+            <h2>Explains your pace</h2>
+            <p><strong>Avg</strong> is usage per elapsed workday. <strong>Available</strong> is what remains for each workday through the month.</p>
+          </section>
+          <section>
+            <h2>Stays local</h2>
+            <p>Budgets, snapshots, and history remain in browser storage. Settings lets you export or clear that data.</p>
+          </section>
+          <p class="pace-key"><span class="pace-under">Green: below pace</span><span>Neutral: aligned</span><span class="pace-over">Red: above pace</span></p>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="/src/popup.ts"></script>
+  </body>
+</html>
