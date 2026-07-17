@@ -180,6 +180,7 @@ function populateSettings(): void {
   }
   (form.elements.namedItem("retentionMonths") as HTMLInputElement).value = String(currentState.settings.retentionMonths);
   (form.elements.namedItem("syncMinutes") as HTMLInputElement).value = String(currentState.settings.syncMinutes);
+  (form.elements.namedItem("allowScheduledCursorFocus") as HTMLInputElement).checked = currentState.settings.allowScheduledCursorFocus;
   saveStatus.textContent = "";
 }
 
@@ -231,7 +232,14 @@ form.addEventListener("submit", (event) => {
   ])) as Record<ProviderId, number>;
   const retention = Number((form.elements.namedItem("retentionMonths") as HTMLInputElement).value);
   const syncMinutes = Number((form.elements.namedItem("syncMinutes") as HTMLInputElement).value);
-  void send<ExtensionState>({ type: "SAVE_SETTINGS", budgets, retentionMonths: retention, syncMinutes }).then((state) => {
+  const allowScheduledCursorFocus = (form.elements.namedItem("allowScheduledCursorFocus") as HTMLInputElement).checked;
+  void send<ExtensionState>({
+    type: "SAVE_SETTINGS",
+    budgets,
+    retentionMonths: retention,
+    syncMinutes,
+    allowScheduledCursorFocus,
+  }).then((state) => {
     render(state);
     saveStatus.textContent = `Saved · every ${state.settings.syncMinutes} min`;
   });

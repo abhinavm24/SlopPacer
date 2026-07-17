@@ -190,6 +190,8 @@ h1 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.025em; }
 .form-group label { display: flex; min-height: 43px; align-items: center; justify-content: space-between; margin-left: 12px; padding: 0 12px 0 0; border-top: 1px solid var(--hairline); font-size: 14px; }
 .money-input, .suffix-input { display: flex; align-items: center; color: var(--secondary); }
 .popup-form input { width: 82px; padding: 6px 7px; border: 1px solid var(--track-border); border-radius: 7px; background: var(--control); color: var(--text); text-align: right; font-variant-numeric: tabular-nums; }
+.popup-form input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--blue); }
+.checkbox-row span { padding-right: 10px; }
 .money-input > span:first-child { margin-right: -18px; z-index: 1; font-size: 13px; }
 .money-input input { padding-left: 20px; }
 .suffix-input { gap: 7px; font-size: 13px; }
@@ -200,6 +202,7 @@ h1 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.025em; }
 .data-actions { display: flex; justify-content: center; gap: 8px; padding: 0 18px 12px; }
 .data-actions button { padding: 7px 10px; border: 1px solid var(--track-border); border-radius: 8px; background: var(--control); color: var(--blue); font-size: 13px; }
 .data-actions .danger-button { color: var(--red-text); }
+#settings-view { overflow-y: auto; }
 
 .howto-content { display: grid; gap: 13px; padding: 16px 18px 18px; }
 .howto-content section { padding-bottom: 12px; border-bottom: 1px solid var(--hairline); }

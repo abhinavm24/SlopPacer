@@ -6,6 +6,7 @@ import { PROVIDER_IDS, type ExtensionMessage, type ProviderId } from "./types";
 
 const REFRESH_ALARM = "refresh-ai-usage";
 let refreshPromise: Promise<void> | undefined;
+let refreshAllowsVisibleCursor = false;
 
 async function scheduleRefresh(minutes: number): Promise<void> {
   await chrome.alarms.clear(REFRESH_ALARM);
@@ -38,22 +39,43 @@ async function updateBadge(): Promise<void> {
   await chrome.action.setBadgeText({ text: needsAuth ? "!" : "" });
 }
 
-async function runRefresh(): Promise<void> {
+async function runRefresh(allowVisibleCursor: boolean): Promise<void> {
   const attemptedAt = new Date().toISOString();
   const state = await getState();
   for (const provider of PROVIDER_IDS) {
     await updateProvider(provider, { status: "checking", lastAttemptAt: attemptedAt });
-    await applyResult(provider, await collectProvider(provider, state.providers[provider].budgetUsd), attemptedAt);
   }
+  const results = await Promise.all(PROVIDER_IDS.map(async (provider) => ({
+    provider,
+    result: await collectProvider(provider, state.providers[provider].budgetUsd, allowVisibleCursor),
+  })));
+  // State helpers use read-modify-write, so apply results serially after the slow
+  // page reads finish in parallel. This prevents one provider from clobbering another.
+  for (const { provider, result } of results) await applyResult(provider, result, attemptedAt);
   const refreshed = await getState();
   refreshed.lastRefreshAt = attemptedAt;
   await saveState(refreshed);
   await updateBadge();
 }
 
-async function refreshAll(): Promise<void> {
-  if (!refreshPromise) refreshPromise = runRefresh().finally(() => { refreshPromise = undefined; });
+async function refreshAll(allowVisibleCursor = false): Promise<void> {
+  if (refreshPromise && allowVisibleCursor && !refreshAllowsVisibleCursor) {
+    await refreshPromise;
+    return refreshAll(true);
+  }
+  if (!refreshPromise) {
+    refreshAllowsVisibleCursor = allowVisibleCursor;
+    refreshPromise = runRefresh(allowVisibleCursor).finally(() => {
+      refreshPromise = undefined;
+      refreshAllowsVisibleCursor = false;
+    });
+  }
   return refreshPromise;
+}
+
+async function refreshScheduled(): Promise<void> {
+  const state = await getState();
+  await refreshAll(state.settings.allowScheduledCursorFocus);
 }
 
 async function openSignIn(provider: ProviderId): Promise<void> {
@@ -67,16 +89,21 @@ async function acceptPageUsage(message: Extract<ExtensionMessage, { type: "PAGE_
   await updateBadge();
 }
 
-chrome.runtime.onInstalled.addListener(() => { void ensureInitialized().then(refreshAll); });
-chrome.runtime.onStartup.addListener(() => { void ensureInitialized().then(refreshAll); });
-chrome.alarms.onAlarm.addListener((alarm) => { if (alarm.name === REFRESH_ALARM) void refreshAll(); });
+chrome.runtime.onInstalled.addListener(() => { void ensureInitialized().then(refreshScheduled); });
+chrome.runtime.onStartup.addListener(() => { void ensureInitialized().then(refreshScheduled); });
+chrome.alarms.onAlarm.addListener((alarm) => { if (alarm.name === REFRESH_ALARM) void refreshScheduled(); });
 
 chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendResponse) => {
   void (async () => {
     if (message.type === "GET_STATE") sendResponse(await getState());
-    else if (message.type === "REFRESH_ALL") { await refreshAll(); sendResponse(await getState()); }
+    else if (message.type === "REFRESH_ALL") { await refreshAll(true); sendResponse(await getState()); }
     else if (message.type === "SAVE_SETTINGS") {
-      const state = await saveSettings(message.budgets, message.retentionMonths, message.syncMinutes);
+      const state = await saveSettings(
+        message.budgets,
+        message.retentionMonths,
+        message.syncMinutes,
+        message.allowScheduledCursorFocus,
+      );
       await scheduleRefresh(state.settings.syncMinutes);
       sendResponse(state);
     }

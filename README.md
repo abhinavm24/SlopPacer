@@ -33,7 +33,9 @@ Load `dist/` as an unpacked extension from `chrome://extensions` or
 - Cookies, bearer tokens, emails, and raw provider responses are never persisted.
 - Host permissions are limited to Claude, ChatGPT, and Cursor.
 - The extension reuses an open provider Usage page when available. Otherwise it briefly
-  opens one in an inactive tab, reads it, and closes only the tab it created.
+  opens one, reads it, and closes only the tab it created. During a manual refresh,
+  Cursor's page is temporarily shown because its dashboard defers loading usage data
+  while hidden. Scheduled refreshes do this only when enabled in Settings (off by default).
 - When a session expires, the extension marks that provider as requiring sign-in. The
   user can open the official provider page with **Sign in**.
 

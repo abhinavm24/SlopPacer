@@ -60,6 +60,7 @@
             <h2>Preferences</h2>
             <label>Refresh every <span class="suffix-input"><input name="syncMinutes" type="number" min="1" max="1440" step="1" /><span>minutes</span></span></label>
             <label>Keep history <span class="suffix-input"><input name="retentionMonths" type="number" min="1" max="24" step="1" /><span>months</span></span></label>
+            <label class="checkbox-row"><span>Show Cursor during scheduled refresh</span><input name="allowScheduledCursorFocus" type="checkbox" /></label>
           </div>
           <button class="primary-button" type="submit">Save changes</button>
           <output id="save-status" aria-live="polite"></output>
@@ -74,7 +75,7 @@
         <div class="howto-content">
           <section>
             <h2>Collects account usage</h2>
-            <p>Slop Pacer checks Claude, ChatGPT, and Cursor at your chosen interval (15 minutes by default) using your signed-in browser sessions. When needed, it briefly opens an inactive Usage tab and closes only the tab it created.</p>
+            <p>Slop Pacer checks Claude, ChatGPT, and Cursor at your chosen interval (15 minutes by default) using your signed-in browser sessions. When needed, it briefly opens a Usage tab and closes only the tab it created. Cursor must be temporarily shown because its dashboard does not load usage data while hidden. Scheduled refreshes do this only when enabled in Settings.</p>
           </section>
           <section>
             <h2>Tracks month to date</h2>

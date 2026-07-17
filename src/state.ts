@@ -22,7 +22,7 @@ export function createInitialState(): ExtensionState {
       chatgpt: emptyProvider("chatgpt"),
       cursor: emptyProvider("cursor"),
     },
-    settings: { retentionMonths: 13, syncMinutes: DEFAULT_SYNC_MINUTES },
+    settings: { retentionMonths: 13, syncMinutes: DEFAULT_SYNC_MINUTES, allowScheduledCursorFocus: false },
   };
 }
 
@@ -98,11 +98,13 @@ export async function saveSettings(
   budgets: Record<ProviderId, number>,
   retentionMonths: number,
   syncMinutes: number,
+  allowScheduledCursorFocus: boolean,
 ): Promise<ExtensionState> {
   const state = await getState();
   for (const provider of PROVIDER_IDS) state.providers[provider].budgetUsd = Math.max(0, budgets[provider]);
   state.settings.retentionMonths = Math.min(24, Math.max(1, Math.round(retentionMonths)));
   state.settings.syncMinutes = normalizeSyncMinutes(syncMinutes);
+  state.settings.allowScheduledCursorFocus = allowScheduledCursorFocus;
   await saveState(state);
   return state;
 }

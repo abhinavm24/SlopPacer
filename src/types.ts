@@ -49,6 +49,7 @@ export interface ProviderState {
 export interface ExtensionSettings {
   retentionMonths: number;
   syncMinutes: number;
+  allowScheduledCursorFocus: boolean;
 }
 
 export interface ExtensionState {
@@ -70,7 +71,13 @@ export interface PageUsageResult {
 export type ExtensionMessage =
   | { type: "GET_STATE" }
   | { type: "REFRESH_ALL" }
-  | { type: "SAVE_SETTINGS"; budgets: Record<ProviderId, number>; retentionMonths: number; syncMinutes: number }
+  | {
+    type: "SAVE_SETTINGS";
+    budgets: Record<ProviderId, number>;
+    retentionMonths: number;
+    syncMinutes: number;
+    allowScheduledCursorFocus: boolean;
+  }
   | { type: "OPEN_SIGN_IN"; provider: ProviderId }
   | { type: "PAGE_USAGE"; result: PageUsageResult }
   | { type: "EXPORT_DATA" }

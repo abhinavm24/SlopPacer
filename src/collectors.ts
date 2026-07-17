@@ -7,7 +7,11 @@ export type CollectionResult =
   | { kind: "auth_required"; message: string }
   | { kind: "page_required" | "retryable_error" | "error"; message: string };
 
-const TEMPORARY_PAGE_TIMEOUT_MS = 30_000;
+const TEMPORARY_PAGE_TIMEOUT_MS: Record<ProviderId, number> = {
+  claude: 30_000,
+  chatgpt: 30_000,
+  cursor: 90_000,
+};
 const TEMPORARY_PAGE_POLL_MS = 500;
 
 function cycle(now = new Date()): { start: string; end: string } {
@@ -51,10 +55,19 @@ function wait(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-async function fromTemporaryPage(provider: ProviderId, budgetUsd: number): Promise<CollectionResult | undefined> {
-  const tab = await chrome.tabs.create({ url: providerUsageUrl(provider), active: false });
+async function fromTemporaryPage(
+  provider: ProviderId,
+  budgetUsd: number,
+  allowVisiblePage: boolean,
+): Promise<CollectionResult | undefined> {
+  // Cursor does not request its usage data while its dashboard is hidden.
+  // Keep the other provider tabs inactive, but briefly foreground Cursor so its
+  // visibility-gated request runs, then return the user to their previous tab.
+  const needsVisiblePage = provider === "cursor" && allowVisiblePage;
+  const [previousTab] = needsVisiblePage ? await chrome.tabs.query({ active: true, currentWindow: true }) : [];
+  const tab = await chrome.tabs.create({ url: providerUsageUrl(provider), active: needsVisiblePage });
   if (!tab.id) return undefined;
-  const deadline = Date.now() + TEMPORARY_PAGE_TIMEOUT_MS;
+  const deadline = Date.now() + TEMPORARY_PAGE_TIMEOUT_MS[provider];
   try {
     while (Date.now() < deadline) {
       try {
@@ -72,11 +85,22 @@ async function fromTemporaryPage(provider: ProviderId, budgetUsd: number): Promi
     } catch {
       // The user may have closed the temporary tab first.
     }
+    if (needsVisiblePage && previousTab?.id) {
+      try {
+        await chrome.tabs.update(previousTab.id, { active: true });
+      } catch {
+        // The previous tab or its window may have been closed during refresh.
+      }
+    }
   }
 }
 
-export async function collectProvider(provider: ProviderId, budgetUsd: number): Promise<CollectionResult> {
-  return (await fromOpenPage(provider, budgetUsd)) ?? (await fromTemporaryPage(provider, budgetUsd)) ?? {
+export async function collectProvider(
+  provider: ProviderId,
+  budgetUsd: number,
+  allowVisiblePage = false,
+): Promise<CollectionResult> {
+  return (await fromOpenPage(provider, budgetUsd)) ?? (await fromTemporaryPage(provider, budgetUsd, allowVisiblePage)) ?? {
     kind: "page_required",
     message: `Open ${PROVIDERS[provider].name} Usage to update its current total.`,
   };
