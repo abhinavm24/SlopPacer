@@ -79,8 +79,11 @@
         </form>
         <div class="data-actions">
           <button id="export" type="button">Export JSON</button>
+          <button id="import" type="button">Import JSON</button>
+          <input id="import-file" class="visually-hidden" type="file" accept=".json,application/json" />
           <button id="reset" class="danger-button" type="button">Clear history</button>
         </div>
+        <output id="data-status" aria-live="polite"></output>
       </section>
 
       <section id="howto-view" class="popup-view subview howto-view" hidden>

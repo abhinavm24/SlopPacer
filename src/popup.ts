@@ -1,4 +1,11 @@
 import "./styles.css";
+import {
+  MAX_BACKUP_BYTES,
+  backupErrorMessage,
+  parseBackupText,
+  parseBackupValue,
+  type ImportDataResult,
+} from "./backup";
 import { prepareHistoryChartData } from "./history-chart";
 import { combineSnapshots } from "./normalization";
 import { calculatePacing, type PacingMetrics } from "./pacing";
@@ -10,6 +17,11 @@ const refreshButton = document.querySelector<HTMLButtonElement>("#refresh")!;
 const viewTitle = document.querySelector<HTMLElement>("#view-title")!;
 const form = document.querySelector<HTMLFormElement>("#budget-form")!;
 const saveStatus = document.querySelector<HTMLOutputElement>("#save-status")!;
+const exportButton = document.querySelector<HTMLButtonElement>("#export")!;
+const importButton = document.querySelector<HTMLButtonElement>("#import")!;
+const importFile = document.querySelector<HTMLInputElement>("#import-file")!;
+const resetButton = document.querySelector<HTMLButtonElement>("#reset")!;
+const dataStatus = document.querySelector<HTMLOutputElement>("#data-status")!;
 let currentState: ExtensionState;
 let currentView: "overview" | "history" | "settings" | "howto" = "overview";
 let historyProvider: ProviderId = "claude";
@@ -53,6 +65,25 @@ function chevron(): SVGSVGElement {
 
 async function send<T>(message: ExtensionMessage): Promise<T> {
   return chrome.runtime.sendMessage(message) as Promise<T>;
+}
+
+function setDataControlsDisabled(disabled: boolean): void {
+  exportButton.disabled = disabled;
+  importButton.disabled = disabled;
+  resetButton.disabled = disabled;
+}
+
+function setDataStatus(message: string, isError = false): void {
+  dataStatus.textContent = message;
+  dataStatus.classList.toggle("error", isError);
+}
+
+function backupDate(value: string): string {
+  return new Date(value).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 function render(state: ExtensionState): void {
@@ -348,20 +379,76 @@ form.addEventListener("submit", (event) => {
   });
 });
 
-document.querySelector("#export")?.addEventListener("click", async () => {
-  const data = await send<ExtensionState>({ type: "EXPORT_DATA" });
-  const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `slop-pacer-${new Date().toISOString().slice(0, 10)}.json`;
-  link.click();
-  URL.revokeObjectURL(url);
+exportButton.addEventListener("click", async () => {
+  setDataControlsDisabled(true);
+  setDataStatus("");
+  try {
+    const response = await send<unknown>({ type: "EXPORT_DATA" });
+    const parsed = parseBackupValue(response);
+    if (!parsed.ok) throw new Error("Slop Pacer could not export a backup.");
+    const backup = parsed.backup;
+    const url = URL.createObjectURL(new Blob(
+      [JSON.stringify(backup, null, 2)],
+      { type: "application/json" },
+    ));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `slop-pacer-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    setDataStatus("Backup exported");
+  } catch {
+    setDataStatus("Slop Pacer could not export a backup.", true);
+  } finally {
+    setDataControlsDisabled(false);
+  }
 });
 
-document.querySelector("#reset")?.addEventListener("click", async () => {
+importButton.addEventListener("click", () => importFile.click());
+
+importFile.addEventListener("change", () => {
+  const file = importFile.files?.[0];
+  if (!file) return;
+  void (async () => {
+    setDataControlsDisabled(true);
+    setDataStatus("");
+    try {
+      if (file.size > MAX_BACKUP_BYTES) {
+        throw new Error("The selected backup is larger than 1 MiB.");
+      }
+      const parsed = parseBackupText(await file.text());
+      if (!parsed.ok) throw new Error(backupErrorMessage(parsed.error));
+      const exportedOn = backupDate(parsed.backup.exportedAt);
+      if (!confirm(
+        `Import backup from ${exportedOn}?\n\nThis will replace all local Slop Pacer data.`,
+      )) {
+        setDataStatus("Import cancelled");
+        return;
+      }
+      const result = await send<ImportDataResult>({
+        type: "IMPORT_DATA",
+        backup: parsed.backup,
+      });
+      if (!result.ok) throw new Error(backupErrorMessage(result.error));
+      render(result.state);
+      populateSettings();
+      setDataStatus(`Imported backup from ${backupDate(result.exportedAt)}`);
+    } catch (error: unknown) {
+      setDataStatus(
+        error instanceof Error ? error.message : "Slop Pacer could not restore that backup.",
+        true,
+      );
+    } finally {
+      importFile.value = "";
+      setDataControlsDisabled(false);
+    }
+  })();
+});
+
+resetButton.addEventListener("click", async () => {
   if (!confirm("Clear all locally stored daily history? Current totals and settings will be kept.")) return;
   render(await send<ExtensionState>({ type: "RESET_HISTORY" }));
-  saveStatus.textContent = "History cleared";
+  setDataStatus("History cleared");
 });
 
 void send<ExtensionState>({ type: "GET_STATE" }).then(render);
