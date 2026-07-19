@@ -19,8 +19,7 @@
 - Do not trigger a provider refresh after import.
 - Use top-level imports only.
 - Any new `switch` over a union must include a `never` default check.
-- Preserve the pre-existing uncommitted history-chart changes in `README.md`, `popup.html`, `src/popup.ts`, `src/styles.css`, `src/history-chart.ts`, and `tests/history-chart.test.ts`.
-- Never stage the four shared dirty files wholesale. Tasks 3 and 4 leave their shared-file edits uncommitted unless the owner first commits or explicitly authorizes including the history-chart work.
+- Keep this branch independent from the history-chart branch; include only backup/restore changes.
 
 ---
 
@@ -770,19 +769,14 @@ pnpm build
 
 Expected: all commands PASS and `dist/popup.html` contains the import controls.
 
-- [ ] **Step 8: Preserve the user's dirty popup work**
-
-Run:
+- [ ] **Step 8: Commit the popup workflow**
 
 ```bash
-git diff -- popup.html src/popup.ts src/styles.css
-git status --short
+git add popup.html src/popup.ts src/styles.css tests/popup-backup-controls.test.ts
+git commit -m "feat: add backup import controls"
 ```
 
-Expected: the diff contains both the pre-existing history-chart work and the new
-backup UI. Do not run `git add` on these shared files. Leave
-`tests/popup-backup-controls.test.ts` uncommitted with its matching UI until the owner
-decides how to commit the combined popup changes.
+Expected: the commit contains only popup backup/restore UI and tests.
 
 ### Task 4: Documentation and End-to-End Verification
 
@@ -841,8 +835,8 @@ git diff --check
 git status --short
 ```
 
-Expected: no whitespace errors. Existing history-chart files and shared popup/docs
-files remain uncommitted, while Tasks 1 and 2 are committed.
+Expected: no whitespace errors. History-chart code is inherited from `main` and does
+not appear in the backup/restore branch diff; all backup/restore changes are committed.
 
 - [ ] **Step 5: Manually verify the extension workflow**
 
@@ -859,10 +853,11 @@ Load `dist/` as an unpacked extension in Chrome or Edge 120+ and verify:
    each show the intended error and leave storage unchanged.
 8. Export/import status is announced by the `aria-live` output.
 
-- [ ] **Step 6: Report the intentional uncommitted boundary**
+- [ ] **Step 6: Commit backup documentation**
 
-Do not commit `README.md`, `popup.html`, `src/popup.ts`, `src/styles.css`,
-`tests/popup-backup-controls.test.ts`, `src/history-chart.ts`, or
-`tests/history-chart.test.ts` without owner approval. Report these files together so
-the owner can either commit the history chart first or authorize one combined UI
-commit.
+```bash
+git add README.md popup.html
+git commit -m "docs: document backup restore"
+```
+
+Expected: the commit contains only backup/restore documentation changes.
