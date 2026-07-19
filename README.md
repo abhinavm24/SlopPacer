@@ -8,7 +8,7 @@ A local-first Chrome/Edge extension that combines month-to-date AI usage from:
 
 Each provider has a configurable monthly budget (default: **$2,000**). The extension
 refreshes on a configurable interval (15 minutes by default), keeps normalized daily history locally, and shows both the
-combined budget and provider-level detail.
+combined budget and provider-level detail. History plots Claude, ChatGPT, and Cursor together on a shared daily-dollar chart.
 
 The extension includes rendered Usage-page collectors, local daily history,
 session recovery, export/reset controls, and in-popup Overview, History, Settings, and
