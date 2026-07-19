@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createBackup } from "../src/backup";
-import { createInitialState, restoreBackup, saveSettings } from "../src/state";
+import { createInitialState, getState, restoreBackup, saveSettings } from "../src/state";
 
 describe("extension settings", () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -29,6 +29,61 @@ describe("extension settings", () => {
 
     expect(state.settings.allowScheduledCursorFocus).toBe(true);
     expect(stored.settings.allowScheduledCursorFocus).toBe(true);
+  });
+
+  it("falls back to an exportable initial state when migrated storage is corrupt", async () => {
+    const corrupt = createInitialState() as unknown as Record<string, unknown>;
+    corrupt.settings = {
+      retentionMonths: 13,
+      syncMinutes: "often",
+      allowScheduledCursorFocus: false,
+    };
+    vi.stubGlobal("chrome", {
+      storage: {
+        local: {
+          get: vi.fn(async () => ({ aiUsageMeterState: corrupt })),
+        },
+      },
+    });
+
+    const state = await getState();
+
+    expect(state).toEqual(createInitialState());
+    expect(() => createBackup(state, "2026-07-19T12:00:00.000Z")).not.toThrow();
+  });
+
+  it("preserves valid prior state while filling current defaults", async () => {
+    vi.stubGlobal("chrome", {
+      storage: {
+        local: {
+          get: vi.fn(async () => ({
+            aiUsageMeterState: {
+              schemaVersion: 2,
+              providers: {
+                claude: {
+                  id: "claude",
+                  status: "connected",
+                  budgetUsd: 750,
+                  history: [],
+                },
+              },
+              settings: { retentionMonths: 6, syncMinutes: 60 },
+            },
+          })),
+        },
+      },
+    });
+
+    const state = await getState();
+
+    expect(state.providers.claude.budgetUsd).toBe(750);
+    expect(state.providers.cursor.status).toBe("not_configured");
+    expect(state.settings).toEqual({
+      retentionMonths: 6,
+      syncMinutes: 60,
+      allowScheduledCursorFocus: false,
+    });
+    expect(() => createBackup(state, "2026-07-19T12:00:00.000Z")).not.toThrow();
   });
 });
 

@@ -1,5 +1,11 @@
-import { createBackup, type ImportDataResult } from "./backup";
+import { createBackup } from "./backup";
 import { collectProvider, normalizePageResult, type CollectionResult } from "./collectors";
+import {
+  INVALID_EXTENSION_MESSAGE_RESPONSE,
+  parseExtensionMessage,
+  type ExtensionMessage,
+  type ImportDataResult,
+} from "./messages";
 import { providerUsageUrl } from "./providers";
 import { SerialTaskQueue } from "./serial-queue";
 import {
@@ -15,7 +21,6 @@ import {
 import { normalizeSyncMinutes } from "./sync";
 import {
   PROVIDER_IDS,
-  type ExtensionMessage,
   type ExtensionState,
   type ProviderId,
 } from "./types";
@@ -168,9 +173,15 @@ chrome.runtime.onInstalled.addListener(() => { void ensureInitialized().then(ref
 chrome.runtime.onStartup.addListener(() => { void ensureInitialized().then(refreshScheduled); });
 chrome.alarms.onAlarm.addListener((alarm) => { if (alarm.name === REFRESH_ALARM) void refreshScheduled(); });
 
-chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendResponse) => {
-  void handleMessage(message).then(sendResponse).catch((error: unknown) => {
-    if (message.type === "IMPORT_DATA") {
+chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
+  const parsed = parseExtensionMessage(message);
+  if (!parsed.ok) {
+    sendResponse(INVALID_EXTENSION_MESSAGE_RESPONSE);
+    return true;
+  }
+  const validMessage = parsed.message;
+  void handleMessage(validMessage).then(sendResponse).catch((error: unknown) => {
+    if (validMessage.type === "IMPORT_DATA") {
       const result: ImportDataResult = { ok: false, error: "import_failed" };
       sendResponse(result);
       return;

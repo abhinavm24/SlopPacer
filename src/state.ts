@@ -1,4 +1,5 @@
-import { parseBackupValue, type ImportDataResult } from "./backup";
+import { parseBackupValue, parseExtensionState } from "./backup";
+import type { ImportDataResult } from "./messages";
 import {
   PROVIDER_IDS,
   type DailyUsage,
@@ -11,7 +12,7 @@ import { DEFAULT_SYNC_MINUTES, normalizeSyncMinutes } from "./sync";
 
 const STORAGE_KEY = "aiUsageMeterState";
 
-function emptyProvider(id: ProviderId): ProviderState {
+function emptyProvider<const T extends ProviderId>(id: T): ProviderState<T> {
   return { id, status: "not_configured", budgetUsd: 2000, history: [] };
 }
 
@@ -30,18 +31,27 @@ export function createInitialState(): ExtensionState {
 function migrate(value: unknown): ExtensionState {
   const initial = createInitialState();
   if (!value || typeof value !== "object") return initial;
-  const old = value as Partial<ExtensionState> & { providers?: Partial<Record<ProviderId, Partial<ProviderState>>> };
-  for (const id of PROVIDER_IDS) {
-    initial.providers[id] = { ...initial.providers[id], ...old.providers?.[id], id, history: old.providers?.[id]?.history ?? [] };
-  }
+  const old = value as Partial<Omit<ExtensionState, "providers">> & {
+    providers?: { [T in ProviderId]?: Partial<ProviderState<T>> };
+  };
+  initial.providers.claude = migrateProvider("claude", old.providers?.claude);
+  initial.providers.chatgpt = migrateProvider("chatgpt", old.providers?.chatgpt);
+  initial.providers.cursor = migrateProvider("cursor", old.providers?.cursor);
   initial.lastRefreshAt = old.lastRefreshAt;
   initial.settings = { ...initial.settings, ...old.settings };
   return initial;
 }
 
+function migrateProvider<const T extends ProviderId>(
+  id: T,
+  old: Partial<ProviderState<T>> | undefined,
+): ProviderState<T> {
+  return { ...emptyProvider(id), ...old, id, history: old?.history ?? [] };
+}
+
 export async function getState(): Promise<ExtensionState> {
   const stored = await chrome.storage.local.get(STORAGE_KEY);
-  return migrate(stored[STORAGE_KEY]);
+  return parseExtensionState(migrate(stored[STORAGE_KEY])) ?? createInitialState();
 }
 
 export async function saveState(state: ExtensionState): Promise<void> {
@@ -60,7 +70,10 @@ export async function restoreBackup(value: unknown): Promise<ImportDataResult> {
   };
 }
 
-export async function updateProvider(provider: ProviderId, patch: Partial<ProviderState>): Promise<ExtensionState> {
+export async function updateProvider<const T extends ProviderId>(
+  provider: T,
+  patch: Partial<ProviderState<T>>,
+): Promise<ExtensionState> {
   const state = await getState();
   state.providers[provider] = { ...state.providers[provider], ...patch };
   await saveState(state);

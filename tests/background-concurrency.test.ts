@@ -1,11 +1,11 @@
 import { afterAll, describe, expect, it, vi } from "vitest";
-import type { BackupFileV1, ImportDataResult } from "../src/backup";
-import type { ExtensionMessage } from "../src/types";
+import type { BackupFileV1 } from "../src/backup";
+import type { ImportDataResult } from "../src/messages";
 import "../src/background";
 
 type AlarmListener = (alarm: { name: string }) => void;
 type MessageListener = (
-  message: ExtensionMessage,
+  message: unknown,
   sender: unknown,
   sendResponse: (response: unknown) => void,
 ) => boolean;
@@ -88,6 +88,7 @@ const harness = vi.hoisted(() => {
   });
   const alarmCreate = vi.fn(async () => undefined);
   const setBadgeText = vi.fn(async () => undefined);
+  const storageSet = vi.fn(async () => undefined);
 
   vi.stubGlobal("chrome", {
     action: {
@@ -115,7 +116,7 @@ const harness = vi.hoisted(() => {
     storage: {
       local: {
         get: vi.fn(async () => ({ aiUsageMeterState: state })),
-        set: vi.fn(async () => undefined),
+        set: storageSet,
       },
     },
     tabs: {
@@ -180,6 +181,7 @@ const harness = vi.hoisted(() => {
       lastPersistentWrite = value;
     },
     setBadgeText,
+    storageSet,
     updateProvider,
   };
 });
@@ -200,7 +202,7 @@ vi.mock("../src/state", () => ({
   updateProvider: harness.updateProvider,
 }));
 
-function sendMessage(message: ExtensionMessage): Promise<unknown> {
+function sendMessage(message: unknown): Promise<unknown> {
   return new Promise((resolve) => {
     expect(harness.getMessageListener()(message, undefined, resolve)).toBe(true);
   });
@@ -212,6 +214,29 @@ async function flushWorkerTasks(): Promise<void> {
 
 describe("background import coordination", () => {
   afterAll(() => vi.unstubAllGlobals());
+
+  it.each([
+    ["an unknown discriminant", { type: "DROP_DATA" }],
+    ["a malformed payload", { type: "SAVE_SETTINGS", budgets: { claude: 1_000 } }],
+  ])("rejects %s without mutating state", async (_case, message) => {
+    const mutators = [
+      harness.recordSnapshot,
+      harness.resetHistory,
+      harness.restoreBackup,
+      harness.saveSettings,
+      harness.saveState,
+      harness.storageSet,
+      harness.updateProvider,
+    ] as const;
+    const callCounts = mutators.map((mutator) => mutator.mock.calls.length);
+
+    await expect(sendMessage(message)).resolves.toEqual({
+      error: "Invalid extension message",
+    });
+    mutators.forEach((mutator, index) => {
+      expect(mutator).toHaveBeenCalledTimes(callCounts[index]!);
+    });
+  });
 
   it("serializes import between an active refresh and its queued visible refresh", async () => {
     const activeRefresh = harness.controlNextRefresh();

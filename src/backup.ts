@@ -58,7 +58,7 @@ function providerStateSchema<const T extends ProviderId>(provider: T) {
   });
 }
 
-const extensionStateSchema = z.strictObject({
+export const extensionStateSchema = z.strictObject({
   schemaVersion: z.literal(3),
   providers: z.strictObject({
     claude: providerStateSchema("claude"),
@@ -73,6 +73,17 @@ const extensionStateSchema = z.strictObject({
   lastRefreshAt: isoDateTime.optional(),
 });
 
+type Assert<T extends true> = T;
+type IsBidirectionallyAssignable<Left, Right> =
+  [Left] extends [Right]
+    ? [Right] extends [Left]
+      ? true
+      : false
+    : false;
+export type ExtensionStateSchemaConformance = Assert<
+  IsBidirectionallyAssignable<z.infer<typeof extensionStateSchema>, ExtensionState>
+>;
+
 const backupFileV1Schema = z.strictObject({
   format: z.literal(BACKUP_FORMAT),
   formatVersion: z.literal(BACKUP_VERSION),
@@ -81,19 +92,17 @@ const backupFileV1Schema = z.strictObject({
 });
 
 export type BackupFileV1 = z.infer<typeof backupFileV1Schema>;
-export type BackupErrorCode =
-  | "invalid_json"
-  | "invalid_format"
-  | "unsupported_version"
-  | "invalid_data"
-  | "import_failed";
+export const backupErrorCodeSchema = z.enum([
+  "invalid_json",
+  "invalid_format",
+  "unsupported_version",
+  "invalid_data",
+  "import_failed",
+]);
+export type BackupErrorCode = z.infer<typeof backupErrorCodeSchema>;
 
 export type BackupParseResult =
   | { ok: true; backup: BackupFileV1 }
-  | { ok: false; error: BackupErrorCode };
-
-export type ImportDataResult =
-  | { ok: true; state: BackupFileV1["state"]; exportedAt: string }
   | { ok: false; error: BackupErrorCode };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -110,6 +119,11 @@ export function createBackup(
     exportedAt,
     state,
   });
+}
+
+export function parseExtensionState(value: unknown): ExtensionState | undefined {
+  const parsed = extensionStateSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
 }
 
 export function parseBackupValue(value: unknown): BackupParseResult {
