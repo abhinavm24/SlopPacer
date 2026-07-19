@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   MAX_BACKUP_BYTES,
@@ -11,7 +11,11 @@ import {
 import type { ExtensionMessage } from "../src/messages";
 import { createInitialState } from "../src/state";
 
-const popupMarkup = await readFile(resolve(process.cwd(), "popup.html"), "utf8");
+const testModuleUrl = new URL(import.meta.url);
+if (testModuleUrl.protocol !== "file:") {
+  testModuleUrl.href = pathToFileURL(import.meta.filename).href;
+}
+const popupMarkup = await readFile(new URL("../popup.html", testModuleUrl), "utf8");
 const exportedAt = "2026-07-19T12:00:00.000Z";
 
 type MessageHandler = (message: ExtensionMessage) => unknown | Promise<unknown>;
@@ -22,6 +26,15 @@ function deferred<T>() {
     resolve = resolvePromise;
   });
   return { promise, resolve };
+}
+
+function readBlobText(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => resolve(String(reader.result)));
+    reader.addEventListener("error", () => reject(reader.error));
+    reader.readAsText(blob);
+  });
 }
 
 function createFile(backup: BackupFileV1) {
@@ -63,8 +76,8 @@ async function setupPopup(handleMessage: MessageHandler = () => {
     return Promise.resolve(handleMessage(message));
   });
   const confirmImport = vi.fn(() => true);
-  const createObjectURL = vi.fn(() => "blob:backup");
-  const revokeObjectURL = vi.fn();
+  const createObjectURL = vi.fn((_blob: Blob) => "blob:backup");
+  const revokeObjectURL = vi.fn((_url: string) => undefined);
   class TestUrl extends URL {
     static createObjectURL = createObjectURL;
     static revokeObjectURL = revokeObjectURL;
@@ -335,6 +348,11 @@ describe("popup backup export behavior", () => {
     });
     expect(popup.createObjectURL).toHaveBeenCalledOnce();
     expect(popup.downloadClick).toHaveBeenCalledOnce();
+    const blob = popup.createObjectURL.mock.calls[0]![0];
+    expect(blob.type).toBe("application/json");
+    expect(JSON.parse(await readBlobText(blob))).toEqual(backup);
+    const link = popup.downloadClick.mock.contexts[0] as HTMLAnchorElement;
+    expect(link.download).toBe(`slop-pacer-${new Date().toISOString().slice(0, 10)}.json`);
     expect(popup.revokeObjectURL).toHaveBeenCalledWith("blob:backup");
     expectDataControlsEnabled(popup);
   });
