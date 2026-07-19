@@ -43,6 +43,18 @@
       </div>
 
       <section id="history-view" class="popup-view subview" hidden>
+        <section class="history-chart-card" aria-labelledby="history-chart-title">
+          <div class="history-chart-heading">
+            <h2 id="history-chart-title">Daily usage</h2>
+            <span>Last 30 recorded days</span>
+          </div>
+          <div class="history-legend" aria-label="Chart legend">
+            <span class="legend-claude">Claude</span>
+            <span class="legend-chatgpt">ChatGPT</span>
+            <span class="legend-cursor">Cursor</span>
+          </div>
+          <div id="history-chart" class="history-chart"></div>
+        </section>
         <div id="history-tabs" class="segmented-control" role="tablist" aria-label="History provider"></div>
         <div id="history-list" class="history-list"></div>
         <p class="view-note">Daily usage stored locally for the retained period.</p>
