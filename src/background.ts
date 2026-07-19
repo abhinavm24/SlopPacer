@@ -91,12 +91,13 @@ async function refreshScheduled(): Promise<void> {
 }
 
 async function importData(backup: unknown): Promise<ImportDataResult> {
-  await refreshPromise;
   if (importPromise) {
     await importPromise;
     return importData(backup);
   }
+  const activeRefresh = refreshPromise;
   importPromise = (async () => {
+    await activeRefresh;
     const result = await restoreBackup(backup);
     if (result.ok) {
       await scheduleRefresh(result.state.settings.syncMinutes);
