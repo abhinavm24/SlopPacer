@@ -1,10 +1,32 @@
+import { createBackup } from "./backup";
 import { collectProvider, normalizePageResult, type CollectionResult } from "./collectors";
+import {
+  INVALID_EXTENSION_MESSAGE_RESPONSE,
+  parseExtensionMessage,
+  type ExtensionMessage,
+  type ImportDataResult,
+} from "./messages";
 import { providerUsageUrl } from "./providers";
-import { createInitialState, getState, recordSnapshot, resetHistory, saveSettings, saveState, updateProvider } from "./state";
+import { SerialTaskQueue } from "./serial-queue";
+import {
+  createInitialState,
+  getState,
+  recordSnapshot,
+  resetHistory,
+  restoreBackup,
+  saveSettings,
+  saveState,
+  updateProvider,
+} from "./state";
 import { normalizeSyncMinutes } from "./sync";
-import { PROVIDER_IDS, type ExtensionMessage, type ProviderId } from "./types";
+import {
+  PROVIDER_IDS,
+  type ExtensionState,
+  type ProviderId,
+} from "./types";
 
 const REFRESH_ALARM = "refresh-ai-usage";
+const stateTasks = new SerialTaskQueue();
 let refreshPromise: Promise<void> | undefined;
 let refreshAllowsVisibleCursor = false;
 
@@ -14,9 +36,11 @@ async function scheduleRefresh(minutes: number): Promise<void> {
 }
 
 async function ensureInitialized(): Promise<void> {
-  const stored = await chrome.storage.local.get("aiUsageMeterState");
-  if (!stored.aiUsageMeterState) await saveState(createInitialState());
-  await scheduleRefresh((await getState()).settings.syncMinutes);
+  await stateTasks.run(async () => {
+    const stored = await chrome.storage.local.get("aiUsageMeterState");
+    if (!stored.aiUsageMeterState) await saveState(createInitialState());
+    await scheduleRefresh((await getState()).settings.syncMinutes);
+  });
 }
 
 async function applyResult(provider: ProviderId, result: CollectionResult, attemptedAt: string): Promise<void> {
@@ -59,28 +83,48 @@ async function runRefresh(allowVisibleCursor: boolean): Promise<void> {
 }
 
 async function refreshAll(allowVisibleCursor = false): Promise<void> {
-  if (refreshPromise && allowVisibleCursor && !refreshAllowsVisibleCursor) {
-    await refreshPromise;
+  const activeRefresh = refreshPromise;
+  if (activeRefresh && allowVisibleCursor && !refreshAllowsVisibleCursor) {
+    await activeRefresh.catch(() => undefined);
     return refreshAll(true);
   }
-  if (!refreshPromise) {
-    refreshAllowsVisibleCursor = allowVisibleCursor;
-    refreshPromise = runRefresh(allowVisibleCursor).finally(() => {
+  if (activeRefresh) return activeRefresh;
+  refreshAllowsVisibleCursor = allowVisibleCursor;
+  const queuedRefresh = stateTasks.run(() => runRefresh(allowVisibleCursor));
+  const trackedRefresh = queuedRefresh.finally(() => {
+    if (refreshPromise === trackedRefresh) {
       refreshPromise = undefined;
       refreshAllowsVisibleCursor = false;
-    });
-  }
-  return refreshPromise;
+    }
+  });
+  refreshPromise = trackedRefresh;
+  return trackedRefresh;
 }
 
 async function refreshScheduled(): Promise<void> {
-  const state = await getState();
+  const state = await stateTasks.run(getState);
   await refreshAll(state.settings.allowScheduledCursorFocus);
 }
 
-async function openSignIn(provider: ProviderId): Promise<void> {
+async function importData(backup: unknown): Promise<ImportDataResult> {
+  return stateTasks.run(async () => {
+    const result = await restoreBackup(backup);
+    if (result.ok) {
+      await Promise.allSettled([
+        scheduleRefresh(result.state.settings.syncMinutes),
+        updateBadge(),
+      ]);
+    }
+    return result;
+  });
+}
+
+async function openSignIn(provider: ProviderId): Promise<ExtensionState> {
   await chrome.tabs.create({ url: providerUsageUrl(provider), active: true });
-  await updateProvider(provider, { status: "checking", message: "Usage page opened. If prompted, sign in; then return and refresh." });
+  return stateTasks.run(() => updateProvider(provider, {
+    status: "checking",
+    message: "Usage page opened. If prompted, sign in; then return and refresh.",
+  }));
 }
 
 async function acceptPageUsage(message: Extract<ExtensionMessage, { type: "PAGE_USAGE" }>): Promise<void> {
@@ -89,29 +133,61 @@ async function acceptPageUsage(message: Extract<ExtensionMessage, { type: "PAGE_
   await updateBadge();
 }
 
+async function handleMessage(message: ExtensionMessage): Promise<unknown> {
+  switch (message.type) {
+    case "GET_STATE":
+      return stateTasks.run(getState);
+    case "REFRESH_ALL":
+      await refreshAll(true);
+      return stateTasks.run(getState);
+    case "SAVE_SETTINGS":
+      return stateTasks.run(async () => {
+        const state = await saveSettings(
+          message.budgets,
+          message.retentionMonths,
+          message.syncMinutes,
+          message.allowScheduledCursorFocus,
+        );
+        await scheduleRefresh(state.settings.syncMinutes);
+        return state;
+      });
+    case "OPEN_SIGN_IN":
+      return openSignIn(message.provider);
+    case "PAGE_USAGE":
+      await stateTasks.run(() => acceptPageUsage(message));
+      return { ok: true };
+    case "EXPORT_DATA":
+      return createBackup(await stateTasks.run(getState));
+    case "IMPORT_DATA":
+      return importData(message.backup);
+    case "RESET_HISTORY":
+      return stateTasks.run(resetHistory);
+    default: {
+      const exhaustiveMessage: never = message;
+      return exhaustiveMessage;
+    }
+  }
+}
+
 chrome.runtime.onInstalled.addListener(() => { void ensureInitialized().then(refreshScheduled); });
 chrome.runtime.onStartup.addListener(() => { void ensureInitialized().then(refreshScheduled); });
 chrome.alarms.onAlarm.addListener((alarm) => { if (alarm.name === REFRESH_ALARM) void refreshScheduled(); });
 
-chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendResponse) => {
-  void (async () => {
-    if (message.type === "GET_STATE") sendResponse(await getState());
-    else if (message.type === "REFRESH_ALL") { await refreshAll(true); sendResponse(await getState()); }
-    else if (message.type === "SAVE_SETTINGS") {
-      const state = await saveSettings(
-        message.budgets,
-        message.retentionMonths,
-        message.syncMinutes,
-        message.allowScheduledCursorFocus,
-      );
-      await scheduleRefresh(state.settings.syncMinutes);
-      sendResponse(state);
+chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
+  const parsed = parseExtensionMessage(message);
+  if (!parsed.ok) {
+    sendResponse(INVALID_EXTENSION_MESSAGE_RESPONSE);
+    return true;
+  }
+  const validMessage = parsed.message;
+  void handleMessage(validMessage).then(sendResponse).catch((error: unknown) => {
+    if (validMessage.type === "IMPORT_DATA") {
+      const result: ImportDataResult = { ok: false, error: "import_failed" };
+      sendResponse(result);
+      return;
     }
-    else if (message.type === "OPEN_SIGN_IN") { await openSignIn(message.provider); sendResponse(await getState()); }
-    else if (message.type === "PAGE_USAGE") { await acceptPageUsage(message); sendResponse({ ok: true }); }
-    else if (message.type === "EXPORT_DATA") sendResponse(await getState());
-    else if (message.type === "RESET_HISTORY") sendResponse(await resetHistory());
-  })().catch((error: unknown) => sendResponse({ error: error instanceof Error ? error.message : "Unexpected error" }));
+    sendResponse({ error: error instanceof Error ? error.message : "Unexpected error" });
+  });
   return true;
 });
 

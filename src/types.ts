@@ -18,8 +18,8 @@ export interface DailyUsage {
   nativeUsed?: number;
 }
 
-export interface ProviderSnapshot {
-  provider: ProviderId;
+export interface ProviderSnapshot<T extends ProviderId = ProviderId> {
+  provider: T;
   capturedAt: string;
   cycleStart: string;
   cycleEnd: string;
@@ -35,11 +35,11 @@ export interface ProviderSnapshot {
   pendingUsd?: number;
 }
 
-export interface ProviderState {
-  id: ProviderId;
+export interface ProviderState<T extends ProviderId = ProviderId> {
+  id: T;
   status: ConnectionStatus;
   budgetUsd: number;
-  snapshot?: ProviderSnapshot;
+  snapshot?: ProviderSnapshot<T>;
   history: DailyUsage[];
   message?: string;
   lastAttemptAt?: string;
@@ -54,7 +54,7 @@ export interface ExtensionSettings {
 
 export interface ExtensionState {
   schemaVersion: 3;
-  providers: Record<ProviderId, ProviderState>;
+  providers: { [T in ProviderId]: ProviderState<T> };
   settings: ExtensionSettings;
   lastRefreshAt?: string;
 }
@@ -67,20 +67,5 @@ export interface PageUsageResult {
   nativeUnit?: "usd" | "credits";
   message?: string;
 }
-
-export type ExtensionMessage =
-  | { type: "GET_STATE" }
-  | { type: "REFRESH_ALL" }
-  | {
-    type: "SAVE_SETTINGS";
-    budgets: Record<ProviderId, number>;
-    retentionMonths: number;
-    syncMinutes: number;
-    allowScheduledCursorFocus: boolean;
-  }
-  | { type: "OPEN_SIGN_IN"; provider: ProviderId }
-  | { type: "PAGE_USAGE"; result: PageUsageResult }
-  | { type: "EXPORT_DATA" }
-  | { type: "RESET_HISTORY" };
 
 export type ContentMessage = { type: "SCRAPE_USAGE" };
