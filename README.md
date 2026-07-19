@@ -11,8 +11,8 @@ refreshes on a configurable interval (15 minutes by default), keeps normalized d
 combined budget and provider-level detail. History plots Claude, ChatGPT, and Cursor together on a shared daily-dollar chart.
 
 The extension includes rendered Usage-page collectors, local daily history,
-session recovery, export/reset controls, and in-popup Overview, History, Settings, and
-How It Works views. See [INVESTIGATION.md](INVESTIGATION.md) for the provider constraints.
+session recovery, export/import/reset controls, and in-popup Overview, History,
+Settings, and How It Works views.
 
 ## Development
 
@@ -30,6 +30,9 @@ Load `dist/` as an unpacked extension from `chrome://extensions` or
 ## Privacy model
 
 - Usage data stays in `chrome.storage.local`.
+- Settings can export a versioned local backup or restore one. Restoring a backup
+  replaces current Slop Pacer data after confirmation; backup contents are never
+  uploaded.
 - Cookies, bearer tokens, emails, and raw provider responses are never persisted.
 - Host permissions are limited to Claude, ChatGPT, and Cursor.
 - The extension reuses an open provider Usage page when available. Otherwise it briefly
