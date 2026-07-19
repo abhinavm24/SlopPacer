@@ -13,10 +13,12 @@ type MessageListener = (
 const harness = vi.hoisted(() => {
   function deferred<T>() {
     let resolve!: (value: T | PromiseLike<T>) => void;
-    const promise = new Promise<T>((resolvePromise) => {
+    let reject!: (reason?: unknown) => void;
+    const promise = new Promise<T>((resolvePromise, rejectPromise) => {
       resolve = resolvePromise;
+      reject = rejectPromise;
     });
-    return { promise, resolve };
+    return { promise, reject, resolve };
   }
 
   const state: BackupFileV1["state"] = {
@@ -41,10 +43,15 @@ const harness = vi.hoisted(() => {
     started: ReturnType<typeof deferred<void>>;
     release: ReturnType<typeof deferred<void>>;
   }> = [];
+  const pendingPageUsageControls: Array<{
+    started: ReturnType<typeof deferred<void>>;
+    release: ReturnType<typeof deferred<void>>;
+  }> = [];
   const pendingRefreshControls: Array<ReturnType<typeof deferred<void>>> = [];
   let alarmListener: AlarmListener | undefined;
   let messageListener: MessageListener | undefined;
   let currentRefreshControl: ReturnType<typeof deferred<void>> | undefined;
+  let lastPersistentWrite = "initial";
   let providersStartedInRefresh = 0;
 
   const collectProvider = vi.fn(async () => {
@@ -59,14 +66,25 @@ const harness = vi.hoisted(() => {
   });
   const restoreBackup = vi.fn(async () => {
     const control = pendingImportControls.shift();
-    if (!control) throw new Error("Import control was not configured");
-    control.started.resolve(undefined);
-    await control.release.promise;
+    if (control) {
+      control.started.resolve(undefined);
+      await control.release.promise;
+    }
+    lastPersistentWrite = "import";
     return importResult;
   });
   const getState = vi.fn(async () => state);
   const saveState = vi.fn(async () => undefined);
   const updateProvider = vi.fn(async () => state);
+  const recordSnapshot = vi.fn(async () => {
+    const control = pendingPageUsageControls.shift();
+    if (control) {
+      control.started.resolve(undefined);
+      await control.release.promise;
+      lastPersistentWrite = "page_usage";
+    }
+    return state;
+  });
   const alarmCreate = vi.fn(async () => undefined);
   const setBadgeText = vi.fn(async () => undefined);
 
@@ -115,6 +133,14 @@ const harness = vi.hoisted(() => {
       pendingImportControls.push(control);
       return control;
     },
+    controlNextPageUsage: () => {
+      const control = {
+        started: deferred<void>(),
+        release: deferred<void>(),
+      };
+      pendingPageUsageControls.push(control);
+      return control;
+    },
     controlNextRefresh: () => {
       const control = deferred<void>();
       pendingRefreshControls.push(control);
@@ -130,12 +156,34 @@ const harness = vi.hoisted(() => {
       return messageListener;
     },
     getState,
+    getLastPersistentWrite: () => lastPersistentWrite,
     importResult,
-    recordSnapshot: vi.fn(async () => state),
+    normalizePageResult: vi.fn(() => ({
+      kind: "success" as const,
+      snapshot: {
+        provider: "claude" as const,
+        capturedAt: "2026-07-19T12:00:00.000Z",
+        cycleStart: "2026-07-01",
+        cycleEnd: "2026-07-31",
+        nativeUnit: "usd" as const,
+        nativeUsed: 10,
+        nativeLimit: 100,
+        budgetUsd: 2_000,
+        actualUsedUsd: 10,
+        equivalentUsedUsd: 10,
+        remainingUsd: 1_990,
+        utilizationPercent: 0.5,
+        source: "page" as const,
+      },
+    })),
+    recordSnapshot,
     resetHistory: vi.fn(async () => state),
     restoreBackup,
     saveSettings: vi.fn(async () => state),
     saveState,
+    setLastPersistentWrite: (value: string) => {
+      lastPersistentWrite = value;
+    },
     setBadgeText,
     updateProvider,
   };
@@ -143,7 +191,7 @@ const harness = vi.hoisted(() => {
 
 vi.mock("../src/collectors", () => ({
   collectProvider: harness.collectProvider,
-  normalizePageResult: vi.fn(),
+  normalizePageResult: harness.normalizePageResult,
 }));
 
 vi.mock("../src/state", () => ({
@@ -238,5 +286,94 @@ describe("background import coordination", () => {
     );
     expect(harness.setBadgeText).toHaveBeenCalledWith({ text: "" });
     expect(harness.collectProvider).toHaveBeenCalledTimes(collectionCount);
+  });
+
+  it("imports after an in-flight page usage write so restored state remains authoritative", async () => {
+    const pageUsage = harness.controlNextPageUsage();
+    harness.setLastPersistentWrite("initial");
+    const pageResponse = sendMessage({
+      type: "PAGE_USAGE",
+      result: {
+        provider: "claude",
+        kind: "usage",
+        used: 10,
+        limit: 100,
+        nativeUnit: "usd",
+      },
+    });
+    await pageUsage.started.promise;
+
+    const importResponse = sendMessage({ type: "IMPORT_DATA", backup: {} });
+    await flushWorkerTasks();
+    pageUsage.release.resolve(undefined);
+
+    await expect(pageResponse).resolves.toEqual({ ok: true });
+    await expect(importResponse).resolves.toEqual(harness.importResult);
+    expect(harness.getLastPersistentWrite()).toBe("import");
+  });
+
+  it("runs a valid import after a rejected refresh", async () => {
+    const collectionCount = harness.collectProvider.mock.calls.length;
+    const failedRefresh = harness.controlNextRefresh();
+    const refreshResponse = sendMessage({ type: "REFRESH_ALL" });
+    await vi.waitFor(() => {
+      expect(harness.collectProvider).toHaveBeenCalledTimes(collectionCount + 3);
+    });
+
+    const importResponse = sendMessage({ type: "IMPORT_DATA", backup: {} });
+    failedRefresh.reject(new Error("Refresh failed"));
+
+    await expect(refreshResponse).resolves.toEqual({ error: "Refresh failed" });
+    await expect(importResponse).resolves.toEqual(harness.importResult);
+  });
+
+  it("runs queued import and refresh work after a rejected import", async () => {
+    const collectionCount = harness.collectProvider.mock.calls.length;
+    const failedImport = harness.controlNextImport();
+    const failedResponse = sendMessage({ type: "IMPORT_DATA", backup: { id: "failed" } });
+    await failedImport.started.promise;
+
+    const importResponse = sendMessage({ type: "IMPORT_DATA", backup: { id: "valid" } });
+    const refreshResponse = sendMessage({ type: "REFRESH_ALL" });
+    failedImport.release.reject(new Error("Import failed"));
+
+    await expect(failedResponse).resolves.toEqual({ ok: false, error: "import_failed" });
+    await expect(importResponse).resolves.toEqual(harness.importResult);
+    await expect(refreshResponse).resolves.toEqual(harness.importResult.state);
+    expect(harness.collectProvider).toHaveBeenCalledTimes(collectionCount + 3);
+  });
+
+  it("queues settings, reset, and sign-in state writes behind import", async () => {
+    const importControl = harness.controlNextImport();
+    const importResponse = sendMessage({ type: "IMPORT_DATA", backup: {} });
+    await importControl.started.promise;
+    const saveSettingsCount = harness.saveSettings.mock.calls.length;
+    const resetHistoryCount = harness.resetHistory.mock.calls.length;
+    const updateProviderCount = harness.updateProvider.mock.calls.length;
+
+    const settingsResponse = sendMessage({
+      type: "SAVE_SETTINGS",
+      budgets: { claude: 1_000, chatgpt: 1_000, cursor: 1_000 },
+      retentionMonths: 12,
+      syncMinutes: 30,
+      allowScheduledCursorFocus: false,
+    });
+    const resetResponse = sendMessage({ type: "RESET_HISTORY" });
+    const signInResponse = sendMessage({ type: "OPEN_SIGN_IN", provider: "claude" });
+    await flushWorkerTasks();
+    const callsDuringImport = {
+      resetHistory: harness.resetHistory.mock.calls.length,
+      saveSettings: harness.saveSettings.mock.calls.length,
+      updateProvider: harness.updateProvider.mock.calls.length,
+    };
+
+    importControl.release.resolve(undefined);
+    await Promise.all([importResponse, settingsResponse, resetResponse, signInResponse]);
+
+    expect(callsDuringImport).toEqual({
+      resetHistory: resetHistoryCount,
+      saveSettings: saveSettingsCount,
+      updateProvider: updateProviderCount,
+    });
   });
 });
