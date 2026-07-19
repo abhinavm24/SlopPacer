@@ -37,21 +37,31 @@ const harness = vi.hoisted(() => {
     state,
     exportedAt: "2026-07-19T12:00:00.000Z",
   };
-  const releaseRefresh = deferred<void>();
-  const importStarted = deferred<void>();
-  const releaseImport = deferred<void>();
+  const pendingImportControls: Array<{
+    started: ReturnType<typeof deferred<void>>;
+    release: ReturnType<typeof deferred<void>>;
+  }> = [];
+  const pendingRefreshControls: Array<ReturnType<typeof deferred<void>>> = [];
   let alarmListener: AlarmListener | undefined;
   let messageListener: MessageListener | undefined;
-  let collectionCount = 0;
+  let currentRefreshControl: ReturnType<typeof deferred<void>> | undefined;
+  let providersStartedInRefresh = 0;
 
   const collectProvider = vi.fn(async () => {
-    collectionCount += 1;
-    if (collectionCount <= 3) await releaseRefresh.promise;
+    if (providersStartedInRefresh === 0) {
+      currentRefreshControl = pendingRefreshControls.shift();
+    }
+    const refreshControl = currentRefreshControl;
+    providersStartedInRefresh = (providersStartedInRefresh + 1) % 3;
+    if (providersStartedInRefresh === 0) currentRefreshControl = undefined;
+    await refreshControl?.promise;
     return { kind: "auth_required" as const, message: "Sign in required" };
   });
   const restoreBackup = vi.fn(async () => {
-    importStarted.resolve(undefined);
-    await releaseImport.promise;
+    const control = pendingImportControls.shift();
+    if (!control) throw new Error("Import control was not configured");
+    control.started.resolve(undefined);
+    await control.release.promise;
     return importResult;
   });
   const getState = vi.fn(async () => state);
@@ -94,6 +104,19 @@ const harness = vi.hoisted(() => {
 
   return {
     collectProvider,
+    controlNextImport: () => {
+      const control = {
+        started: deferred<void>(),
+        release: deferred<void>(),
+      };
+      pendingImportControls.push(control);
+      return control;
+    },
+    controlNextRefresh: () => {
+      const control = deferred<void>();
+      pendingRefreshControls.push(control);
+      return control;
+    },
     createInitialState: vi.fn(() => state),
     getAlarmListener: () => {
       if (!alarmListener) throw new Error("Alarm listener was not registered");
@@ -105,10 +128,7 @@ const harness = vi.hoisted(() => {
     },
     getState,
     importResult,
-    importStarted,
     recordSnapshot: vi.fn(async () => state),
-    releaseImport,
-    releaseRefresh,
     resetHistory: vi.fn(async () => state),
     restoreBackup,
     saveSettings: vi.fn(async () => state),
@@ -147,6 +167,8 @@ describe("background import coordination", () => {
   afterAll(() => vi.unstubAllGlobals());
 
   it("serializes import between an active refresh and its queued visible refresh", async () => {
+    const activeRefresh = harness.controlNextRefresh();
+    const imported = harness.controlNextImport();
     harness.getAlarmListener()({ name: "refresh-ai-usage" });
     await vi.waitFor(() => expect(harness.collectProvider).toHaveBeenCalledTimes(3));
 
@@ -155,16 +177,43 @@ describe("background import coordination", () => {
 
     expect(harness.restoreBackup).not.toHaveBeenCalled();
 
-    harness.releaseRefresh.resolve(undefined);
-    await harness.importStarted.promise;
+    activeRefresh.resolve(undefined);
+    await imported.started.promise;
     await flushWorkerTasks();
 
     expect(harness.collectProvider).toHaveBeenCalledTimes(3);
 
-    harness.releaseImport.resolve(undefined);
+    imported.release.resolve(undefined);
     await expect(importResponse).resolves.toEqual(harness.importResult);
     await queuedRefresh;
 
     expect(harness.collectProvider).toHaveBeenCalledTimes(6);
+  });
+
+  it("keeps refresh blocked across two serialized imports", async () => {
+    const collectionCount = harness.collectProvider.mock.calls.length;
+    const importA = harness.controlNextImport();
+    const importB = harness.controlNextImport();
+    const responseA = sendMessage({ type: "IMPORT_DATA", backup: { id: "A" } });
+
+    await importA.started.promise;
+
+    const responseB = sendMessage({ type: "IMPORT_DATA", backup: { id: "B" } });
+    const refreshResponse = sendMessage({ type: "REFRESH_ALL" });
+
+    expect(harness.collectProvider).toHaveBeenCalledTimes(collectionCount);
+
+    importA.release.resolve(undefined);
+    await importB.started.promise;
+    await flushWorkerTasks();
+
+    expect(harness.collectProvider).toHaveBeenCalledTimes(collectionCount);
+
+    importB.release.resolve(undefined);
+    await expect(responseA).resolves.toEqual(harness.importResult);
+    await expect(responseB).resolves.toEqual(harness.importResult);
+    await refreshResponse;
+
+    expect(harness.collectProvider).toHaveBeenCalledTimes(collectionCount + 3);
   });
 });

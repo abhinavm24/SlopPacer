@@ -70,7 +70,10 @@ async function runRefresh(allowVisibleCursor: boolean): Promise<void> {
 }
 
 async function refreshAll(allowVisibleCursor = false): Promise<void> {
-  if (importPromise) await importPromise;
+  if (importPromise) {
+    await importPromise;
+    return refreshAll(allowVisibleCursor);
+  }
   if (refreshPromise && allowVisibleCursor && !refreshAllowsVisibleCursor) {
     await refreshPromise;
     return refreshAll(true);
