@@ -9,7 +9,6 @@ describe("popup backup controls", () => {
     expect(markup).toContain('id="import"');
     expect(markup).toContain('id="import-file"');
     expect(markup).toContain('accept=".json,application/json"');
-    expect(markup).toContain('id="data-status"');
-    expect(markup).toContain('aria-live="polite"');
+    expect(markup).toContain('<output id="data-status" aria-live="polite"></output>');
   });
 });

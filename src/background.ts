@@ -103,8 +103,10 @@ async function importData(backup: unknown): Promise<ImportDataResult> {
     await activeRefresh;
     const result = await restoreBackup(backup);
     if (result.ok) {
-      await scheduleRefresh(result.state.settings.syncMinutes);
-      await updateBadge();
+      await Promise.allSettled([
+        scheduleRefresh(result.state.settings.syncMinutes),
+        updateBadge(),
+      ]);
     }
     return result;
   })().finally(() => {

@@ -67,15 +67,17 @@ const harness = vi.hoisted(() => {
   const getState = vi.fn(async () => state);
   const saveState = vi.fn(async () => undefined);
   const updateProvider = vi.fn(async () => state);
+  const alarmCreate = vi.fn(async () => undefined);
+  const setBadgeText = vi.fn(async () => undefined);
 
   vi.stubGlobal("chrome", {
     action: {
       setBadgeBackgroundColor: vi.fn(async () => undefined),
-      setBadgeText: vi.fn(async () => undefined),
+      setBadgeText,
     },
     alarms: {
       clear: vi.fn(async () => true),
-      create: vi.fn(async () => undefined),
+      create: alarmCreate,
       onAlarm: {
         addListener: vi.fn((listener: AlarmListener) => {
           alarmListener = listener;
@@ -103,6 +105,7 @@ const harness = vi.hoisted(() => {
   });
 
   return {
+    alarmCreate,
     collectProvider,
     controlNextImport: () => {
       const control = {
@@ -133,6 +136,7 @@ const harness = vi.hoisted(() => {
     restoreBackup,
     saveSettings: vi.fn(async () => state),
     saveState,
+    setBadgeText,
     updateProvider,
   };
 });
@@ -215,5 +219,24 @@ describe("background import coordination", () => {
     await refreshResponse;
 
     expect(harness.collectProvider).toHaveBeenCalledTimes(collectionCount + 3);
+  });
+
+  it("keeps a completed restore successful when alarm and badge updates fail", async () => {
+    const collectionCount = harness.collectProvider.mock.calls.length;
+    const imported = harness.controlNextImport();
+    harness.alarmCreate.mockRejectedValueOnce(new Error("Alarm unavailable"));
+    harness.setBadgeText.mockRejectedValueOnce(new Error("Badge unavailable"));
+
+    const response = sendMessage({ type: "IMPORT_DATA", backup: {} });
+    await imported.started.promise;
+    imported.release.resolve(undefined);
+
+    await expect(response).resolves.toEqual(harness.importResult);
+    expect(harness.alarmCreate).toHaveBeenCalledWith(
+      "refresh-ai-usage",
+      { periodInMinutes: harness.importResult.state.settings.syncMinutes },
+    );
+    expect(harness.setBadgeText).toHaveBeenCalledWith({ text: "" });
+    expect(harness.collectProvider).toHaveBeenCalledTimes(collectionCount);
   });
 });
