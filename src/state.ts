@@ -1,3 +1,4 @@
+import { parseBackupValue, type ImportDataResult } from "./backup";
 import {
   PROVIDER_IDS,
   type DailyUsage,
@@ -45,6 +46,17 @@ export async function getState(): Promise<ExtensionState> {
 
 export async function saveState(state: ExtensionState): Promise<void> {
   await chrome.storage.local.set({ [STORAGE_KEY]: state });
+}
+
+export async function restoreBackup(value: unknown): Promise<ImportDataResult> {
+  const parsed = parseBackupValue(value);
+  if (!parsed.ok) return parsed;
+  await saveState(parsed.backup.state);
+  return {
+    ok: true,
+    state: parsed.backup.state,
+    exportedAt: parsed.backup.exportedAt,
+  };
 }
 
 export async function updateProvider(provider: ProviderId, patch: Partial<ProviderState>): Promise<ExtensionState> {

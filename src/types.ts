@@ -81,6 +81,7 @@ export type ExtensionMessage =
   | { type: "OPEN_SIGN_IN"; provider: ProviderId }
   | { type: "PAGE_USAGE"; result: PageUsageResult }
   | { type: "EXPORT_DATA" }
+  | { type: "IMPORT_DATA"; backup: unknown }
   | { type: "RESET_HISTORY" };
 
 export type ContentMessage = { type: "SCRAPE_USAGE" };

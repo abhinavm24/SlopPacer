@@ -1,11 +1,22 @@
+import { createBackup, type ImportDataResult } from "./backup";
 import { collectProvider, normalizePageResult, type CollectionResult } from "./collectors";
 import { providerUsageUrl } from "./providers";
-import { createInitialState, getState, recordSnapshot, resetHistory, saveSettings, saveState, updateProvider } from "./state";
+import {
+  createInitialState,
+  getState,
+  recordSnapshot,
+  resetHistory,
+  restoreBackup,
+  saveSettings,
+  saveState,
+  updateProvider,
+} from "./state";
 import { normalizeSyncMinutes } from "./sync";
 import { PROVIDER_IDS, type ExtensionMessage, type ProviderId } from "./types";
 
 const REFRESH_ALARM = "refresh-ai-usage";
 let refreshPromise: Promise<void> | undefined;
+let importPromise: Promise<ImportDataResult> | undefined;
 let refreshAllowsVisibleCursor = false;
 
 async function scheduleRefresh(minutes: number): Promise<void> {
@@ -59,6 +70,7 @@ async function runRefresh(allowVisibleCursor: boolean): Promise<void> {
 }
 
 async function refreshAll(allowVisibleCursor = false): Promise<void> {
+  if (importPromise) await importPromise;
   if (refreshPromise && allowVisibleCursor && !refreshAllowsVisibleCursor) {
     await refreshPromise;
     return refreshAll(true);
@@ -76,6 +88,25 @@ async function refreshAll(allowVisibleCursor = false): Promise<void> {
 async function refreshScheduled(): Promise<void> {
   const state = await getState();
   await refreshAll(state.settings.allowScheduledCursorFocus);
+}
+
+async function importData(backup: unknown): Promise<ImportDataResult> {
+  await refreshPromise;
+  if (importPromise) {
+    await importPromise;
+    return importData(backup);
+  }
+  importPromise = (async () => {
+    const result = await restoreBackup(backup);
+    if (result.ok) {
+      await scheduleRefresh(result.state.settings.syncMinutes);
+      await updateBadge();
+    }
+    return result;
+  })().finally(() => {
+    importPromise = undefined;
+  });
+  return importPromise;
 }
 
 async function openSignIn(provider: ProviderId): Promise<void> {
@@ -109,9 +140,17 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendRe
     }
     else if (message.type === "OPEN_SIGN_IN") { await openSignIn(message.provider); sendResponse(await getState()); }
     else if (message.type === "PAGE_USAGE") { await acceptPageUsage(message); sendResponse({ ok: true }); }
-    else if (message.type === "EXPORT_DATA") sendResponse(await getState());
+    else if (message.type === "EXPORT_DATA") sendResponse(createBackup(await getState()));
+    else if (message.type === "IMPORT_DATA") sendResponse(await importData(message.backup));
     else if (message.type === "RESET_HISTORY") sendResponse(await resetHistory());
-  })().catch((error: unknown) => sendResponse({ error: error instanceof Error ? error.message : "Unexpected error" }));
+  })().catch((error: unknown) => {
+    if (message.type === "IMPORT_DATA") {
+      const result: ImportDataResult = { ok: false, error: "import_failed" };
+      sendResponse(result);
+      return;
+    }
+    sendResponse({ error: error instanceof Error ? error.message : "Unexpected error" });
+  });
   return true;
 });
 
