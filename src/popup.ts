@@ -1,4 +1,5 @@
 import "./styles.css";
+import { prepareHistoryChartData } from "./history-chart";
 import { combineSnapshots } from "./normalization";
 import { calculatePacing, type PacingMetrics } from "./pacing";
 import { PROVIDERS } from "./providers";
@@ -139,6 +140,7 @@ function render(state: ExtensionState): void {
 }
 
 function renderHistory(): void {
+  renderHistoryChart();
   const tabs = document.querySelector<HTMLElement>("#history-tabs")!;
   tabs.replaceChildren(...PROVIDER_IDS.map((id) => {
     const button = document.createElement("button");
@@ -172,6 +174,107 @@ function renderHistory(): void {
     row.append(date, value);
     return row;
   }));
+}
+
+function svgElement(tag: string, attributes: Record<string, string> = {}): SVGElement {
+  const element = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const [name, value] of Object.entries(attributes)) element.setAttribute(name, value);
+  return element;
+}
+
+function chartMoney(value: number): string {
+  const precision = Math.abs(value) < 10 && value !== 0 ? 1 : 0;
+  return new Intl.NumberFormat(undefined, {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: precision,
+  }).format(value);
+}
+
+function chartDate(date: string): string {
+  return new Date(`${date}T00:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function renderHistoryChart(): void {
+  const host = document.querySelector<HTMLElement>("#history-chart")!;
+  const histories = Object.fromEntries(PROVIDER_IDS.map((provider) => [
+    provider,
+    currentState.providers[provider].history,
+  ])) as Record<ProviderId, typeof currentState.providers[ProviderId]["history"]>;
+  const data = prepareHistoryChartData(histories);
+  if (!data.dates.length) {
+    const empty = document.createElement("p");
+    empty.className = "chart-empty-state";
+    empty.textContent = "Refresh usage to build the daily chart";
+    host.replaceChildren(empty);
+    return;
+  }
+
+  const width = 374;
+  const height = 132;
+  const plot = { left: 42, right: 10, top: 8, bottom: 24 };
+  const plotWidth = width - plot.left - plot.right;
+  const plotHeight = height - plot.top - plot.bottom;
+  const values = data.series.flatMap((series) => series.points.map((point) => point.value));
+  let minimum = Math.min(0, ...values);
+  let maximum = Math.max(0, ...values);
+  if (minimum === maximum) maximum = minimum + 1;
+  const firstDate = data.dates[0]!;
+  const lastDate = data.dates[data.dates.length - 1]!;
+  const dateStart = new Date(`${firstDate}T00:00:00`).getTime();
+  const dateEnd = new Date(`${lastDate}T00:00:00`).getTime();
+  const x = (date: string): number => {
+    if (dateStart === dateEnd) return plot.left + plotWidth / 2;
+    return plot.left + ((new Date(`${date}T00:00:00`).getTime() - dateStart) / (dateEnd - dateStart)) * plotWidth;
+  };
+  const y = (value: number): number => plot.top + ((maximum - value) / (maximum - minimum)) * plotHeight;
+
+  const svg = svgElement("svg", {
+    viewBox: `0 0 ${width} ${height}`,
+    role: "img",
+    "aria-label": "Daily dollar usage for Claude, ChatGPT, and Cursor",
+  });
+  const title = svgElement("title");
+  title.textContent = "Daily usage by provider";
+  const description = svgElement("desc");
+  description.textContent = `${chartDate(firstDate)} through ${chartDate(lastDate)}`;
+  svg.append(title, description);
+
+  for (const value of [minimum, (minimum + maximum) / 2, maximum]) {
+    const yPosition = y(value);
+    svg.append(svgElement("line", {
+      x1: String(plot.left), y1: String(yPosition), x2: String(width - plot.right), y2: String(yPosition), class: "chart-grid-line",
+    }));
+    const label = svgElement("text", { x: String(plot.left - 6), y: String(yPosition + 3), class: "chart-axis-label chart-y-label" });
+    label.textContent = chartMoney(value);
+    svg.append(label);
+  }
+
+  const labelIndices = [...new Set([0, Math.floor((data.dates.length - 1) / 2), data.dates.length - 1])];
+  for (const index of labelIndices) {
+    const date = data.dates[index];
+    if (!date) continue;
+    const label = svgElement("text", {
+      x: String(x(date)), y: String(height - 5), class: "chart-axis-label chart-x-label",
+    });
+    label.textContent = chartDate(date);
+    svg.append(label);
+  }
+
+  for (const series of data.series) {
+    const pathData = series.points.map((point, index) => `${index ? "L" : "M"}${x(point.date)} ${y(point.value)}`).join(" ");
+    if (pathData) svg.append(svgElement("path", { d: pathData, class: `chart-series series-${series.provider}` }));
+    for (const point of series.points) {
+      const circle = svgElement("circle", {
+        cx: String(x(point.date)), cy: String(y(point.value)), r: "2.6", class: `chart-point series-${series.provider}`,
+      });
+      const pointTitle = svgElement("title");
+      pointTitle.textContent = `${PROVIDERS[series.provider].name} · ${chartDate(point.date)} · ${chartMoney(point.value)}`;
+      circle.append(pointTitle);
+      svg.append(circle);
+    }
+  }
+  host.replaceChildren(svg);
 }
 
 function populateSettings(): void {
