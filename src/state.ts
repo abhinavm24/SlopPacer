@@ -1,8 +1,18 @@
-import { parseBackupValue, parseExtensionState } from "./backup";
+import type { z } from "zod";
+import {
+  dailyUsageSchema,
+  extensionSettingsSchema,
+  isRecord,
+  isoDateTimeSchema,
+  parseBackupValue,
+  parseExtensionState,
+  providerStateSchema,
+} from "./backup";
 import type { ImportDataResult } from "./messages";
 import {
   PROVIDER_IDS,
   type DailyUsage,
+  type ExtensionSettings,
   type ExtensionState,
   type ProviderId,
   type ProviderSnapshot,
@@ -30,28 +40,99 @@ export function createInitialState(): ExtensionState {
 
 function migrate(value: unknown): ExtensionState {
   const initial = createInitialState();
-  if (!value || typeof value !== "object") return initial;
-  const old = value as Partial<Omit<ExtensionState, "providers">> & {
-    providers?: { [T in ProviderId]?: Partial<ProviderState<T>> };
+  if (!isRecord(value)) return initial;
+  const providers = isRecord(value.providers) ? value.providers : {};
+  const lastRefreshAt = parseWithDefault(
+    isoDateTimeSchema.optional(),
+    value.lastRefreshAt,
+    initial.lastRefreshAt,
+  );
+  const migrated: ExtensionState = {
+    schemaVersion: 3,
+    providers: {
+      claude: migrateProvider("claude", providers.claude, initial.providers.claude),
+      chatgpt: migrateProvider("chatgpt", providers.chatgpt, initial.providers.chatgpt),
+      cursor: migrateProvider("cursor", providers.cursor, initial.providers.cursor),
+    },
+    settings: migrateSettings(value.settings, initial.settings),
   };
-  initial.providers.claude = migrateProvider("claude", old.providers?.claude);
-  initial.providers.chatgpt = migrateProvider("chatgpt", old.providers?.chatgpt);
-  initial.providers.cursor = migrateProvider("cursor", old.providers?.cursor);
-  initial.lastRefreshAt = old.lastRefreshAt;
-  initial.settings = { ...initial.settings, ...old.settings };
-  return initial;
+  if (lastRefreshAt !== undefined) migrated.lastRefreshAt = lastRefreshAt;
+  return parseExtensionState(migrated) ?? initial;
 }
 
 function migrateProvider<const T extends ProviderId>(
   id: T,
-  old: Partial<ProviderState<T>> | undefined,
+  value: unknown,
+  fallback: ProviderState<T>,
 ): ProviderState<T> {
-  return { ...emptyProvider(id), ...old, id, history: old?.history ?? [] };
+  const old = isRecord(value) ? value : {};
+  const schema = providerStateSchema(id);
+  const migrated: ProviderState<T> = {
+    id,
+    status: parseWithDefault(schema.shape.status, old.status, fallback.status),
+    budgetUsd: parseWithDefault(schema.shape.budgetUsd, old.budgetUsd, fallback.budgetUsd),
+    history: migrateHistory(old.history, fallback.history),
+  };
+  const snapshot = parseWithDefault(schema.shape.snapshot, old.snapshot, fallback.snapshot);
+  const message = parseWithDefault(schema.shape.message, old.message, fallback.message);
+  const lastAttemptAt = parseWithDefault(
+    schema.shape.lastAttemptAt,
+    old.lastAttemptAt,
+    fallback.lastAttemptAt,
+  );
+  const lastSuccessAt = parseWithDefault(
+    schema.shape.lastSuccessAt,
+    old.lastSuccessAt,
+    fallback.lastSuccessAt,
+  );
+  if (snapshot !== undefined) migrated.snapshot = snapshot;
+  if (message !== undefined) migrated.message = message;
+  if (lastAttemptAt !== undefined) migrated.lastAttemptAt = lastAttemptAt;
+  if (lastSuccessAt !== undefined) migrated.lastSuccessAt = lastSuccessAt;
+  return migrated;
+}
+
+function migrateHistory(value: unknown, fallback: DailyUsage[]): DailyUsage[] {
+  if (!Array.isArray(value)) return fallback;
+  return value.flatMap((entry) => {
+    const parsed = dailyUsageSchema.safeParse(entry);
+    return parsed.success ? [parsed.data] : [];
+  });
+}
+
+function migrateSettings(value: unknown, fallback: ExtensionSettings): ExtensionSettings {
+  const old = isRecord(value) ? value : {};
+  return {
+    retentionMonths: parseWithDefault(
+      extensionSettingsSchema.shape.retentionMonths,
+      old.retentionMonths,
+      fallback.retentionMonths,
+    ),
+    syncMinutes: parseWithDefault(
+      extensionSettingsSchema.shape.syncMinutes,
+      old.syncMinutes,
+      fallback.syncMinutes,
+    ),
+    allowScheduledCursorFocus: parseWithDefault(
+      extensionSettingsSchema.shape.allowScheduledCursorFocus,
+      old.allowScheduledCursorFocus,
+      fallback.allowScheduledCursorFocus,
+    ),
+  };
+}
+
+function parseWithDefault<T>(
+  schema: z.ZodType<T>,
+  value: unknown,
+  fallback: T,
+): T {
+  const parsed = schema.safeParse(value);
+  return parsed.success ? parsed.data : fallback;
 }
 
 export async function getState(): Promise<ExtensionState> {
   const stored = await chrome.storage.local.get(STORAGE_KEY);
-  return parseExtensionState(migrate(stored[STORAGE_KEY])) ?? createInitialState();
+  return migrate(stored[STORAGE_KEY]);
 }
 
 export async function saveState(state: ExtensionState): Promise<void> {

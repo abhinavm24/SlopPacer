@@ -6,7 +6,7 @@ const BACKUP_VERSION = 1;
 export const MAX_BACKUP_BYTES = 1024 * 1024;
 
 const isoDate = z.iso.date();
-const isoDateTime = z.iso.datetime({ offset: true });
+export const isoDateTimeSchema = z.iso.datetime({ offset: true });
 const finiteNumber = z.number().finite();
 const nonNegativeNumber = finiteNumber.nonnegative();
 const connectionStatus = z.enum([
@@ -19,7 +19,7 @@ const connectionStatus = z.enum([
   "error",
 ]);
 
-const dailyUsageSchema = z.strictObject({
+export const dailyUsageSchema = z.strictObject({
   date: isoDate,
   equivalentUsedUsd: finiteNumber,
   actualUsedUsd: finiteNumber.optional(),
@@ -29,7 +29,7 @@ const dailyUsageSchema = z.strictObject({
 function providerSnapshotSchema<const T extends ProviderId>(provider: T) {
   return z.strictObject({
     provider: z.literal(provider),
-    capturedAt: isoDateTime,
+    capturedAt: isoDateTimeSchema,
     cycleStart: isoDate,
     cycleEnd: isoDate,
     nativeUnit: z.enum(["usd", "credits"]),
@@ -45,7 +45,7 @@ function providerSnapshotSchema<const T extends ProviderId>(provider: T) {
   });
 }
 
-function providerStateSchema<const T extends ProviderId>(provider: T) {
+export function providerStateSchema<const T extends ProviderId>(provider: T) {
   return z.strictObject({
     id: z.literal(provider),
     status: connectionStatus,
@@ -53,10 +53,16 @@ function providerStateSchema<const T extends ProviderId>(provider: T) {
     snapshot: providerSnapshotSchema(provider).optional(),
     history: z.array(dailyUsageSchema),
     message: z.string().optional(),
-    lastAttemptAt: isoDateTime.optional(),
-    lastSuccessAt: isoDateTime.optional(),
+    lastAttemptAt: isoDateTimeSchema.optional(),
+    lastSuccessAt: isoDateTimeSchema.optional(),
   });
 }
+
+export const extensionSettingsSchema = z.strictObject({
+  retentionMonths: z.number().int().min(1).max(24),
+  syncMinutes: z.number().int().min(1).max(1440),
+  allowScheduledCursorFocus: z.boolean(),
+});
 
 export const extensionStateSchema = z.strictObject({
   schemaVersion: z.literal(3),
@@ -65,12 +71,8 @@ export const extensionStateSchema = z.strictObject({
     chatgpt: providerStateSchema("chatgpt"),
     cursor: providerStateSchema("cursor"),
   }),
-  settings: z.strictObject({
-    retentionMonths: z.number().int().min(1).max(24),
-    syncMinutes: z.number().int().min(1).max(1440),
-    allowScheduledCursorFocus: z.boolean(),
-  }),
-  lastRefreshAt: isoDateTime.optional(),
+  settings: extensionSettingsSchema,
+  lastRefreshAt: isoDateTimeSchema.optional(),
 });
 
 type Assert<T extends true> = T;
@@ -87,7 +89,7 @@ export type ExtensionStateSchemaConformance = Assert<
 const backupFileV1Schema = z.strictObject({
   format: z.literal(BACKUP_FORMAT),
   formatVersion: z.literal(BACKUP_VERSION),
-  exportedAt: isoDateTime,
+  exportedAt: isoDateTimeSchema,
   state: extensionStateSchema,
 });
 
@@ -105,7 +107,7 @@ export type BackupParseResult =
   | { ok: true; backup: BackupFileV1 }
   | { ok: false; error: BackupErrorCode };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
