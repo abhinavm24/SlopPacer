@@ -120,9 +120,8 @@ export function parseBackupValue(value: unknown): BackupParseResult {
     return { ok: false, error: "unsupported_version" };
   }
   const parsed = backupFileV1Schema.safeParse(value);
-  return parsed.success
-    ? { ok: true, backup: parsed.data }
-    : { ok: false, error: "invalid_data" };
+  if (!parsed.success) return { ok: false, error: "invalid_data" };
+  return { ok: true, backup: parsed.data };
 }
 
 export function parseBackupText(text: string): BackupParseResult {

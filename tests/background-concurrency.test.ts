@@ -21,6 +21,13 @@ const harness = vi.hoisted(() => {
     return { promise, reject, resolve };
   }
 
+  function createTaskControl() {
+    return {
+      started: deferred<void>(),
+      release: deferred<void>(),
+    };
+  }
+
   const state: BackupFileV1["state"] = {
     schemaVersion: 3,
     providers: {
@@ -39,14 +46,8 @@ const harness = vi.hoisted(() => {
     state,
     exportedAt: "2026-07-19T12:00:00.000Z",
   };
-  const pendingImportControls: Array<{
-    started: ReturnType<typeof deferred<void>>;
-    release: ReturnType<typeof deferred<void>>;
-  }> = [];
-  const pendingPageUsageControls: Array<{
-    started: ReturnType<typeof deferred<void>>;
-    release: ReturnType<typeof deferred<void>>;
-  }> = [];
+  const pendingImportControls: Array<ReturnType<typeof createTaskControl>> = [];
+  const pendingPageUsageControls: Array<ReturnType<typeof createTaskControl>> = [];
   const pendingRefreshControls: Array<ReturnType<typeof deferred<void>>> = [];
   let alarmListener: AlarmListener | undefined;
   let messageListener: MessageListener | undefined;
@@ -126,18 +127,12 @@ const harness = vi.hoisted(() => {
     alarmCreate,
     collectProvider,
     controlNextImport: () => {
-      const control = {
-        started: deferred<void>(),
-        release: deferred<void>(),
-      };
+      const control = createTaskControl();
       pendingImportControls.push(control);
       return control;
     },
     controlNextPageUsage: () => {
-      const control = {
-        started: deferred<void>(),
-        release: deferred<void>(),
-      };
+      const control = createTaskControl();
       pendingPageUsageControls.push(control);
       return control;
     },

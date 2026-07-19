@@ -86,6 +86,44 @@ function backupDate(value: string): string {
   });
 }
 
+async function importBackupFile(file: File): Promise<void> {
+  setDataControlsDisabled(true);
+  setDataStatus("");
+  try {
+    if (file.size > MAX_BACKUP_BYTES) {
+      throw new Error("The selected backup is larger than 1 MiB.");
+    }
+    const parsed = parseBackupText(await file.text());
+    if (!parsed.ok) throw new Error(backupErrorMessage(parsed.error));
+
+    const exportedOn = backupDate(parsed.backup.exportedAt);
+    if (!confirm(
+      `Import backup from ${exportedOn}?\n\nThis will replace all local Slop Pacer data.`,
+    )) {
+      setDataStatus("Import cancelled");
+      return;
+    }
+
+    const result = await send<ImportDataResult>({
+      type: "IMPORT_DATA",
+      backup: parsed.backup,
+    });
+    if (!result.ok) throw new Error(backupErrorMessage(result.error));
+
+    render(result.state);
+    populateSettings();
+    setDataStatus(`Imported backup from ${backupDate(result.exportedAt)}`);
+  } catch (error: unknown) {
+    setDataStatus(
+      error instanceof Error ? error.message : "Slop Pacer could not restore that backup.",
+      true,
+    );
+  } finally {
+    importFile.value = "";
+    setDataControlsDisabled(false);
+  }
+}
+
 function render(state: ExtensionState): void {
   currentState = state;
   const snapshots = PROVIDER_IDS.flatMap((id) => state.providers[id].snapshot ? [state.providers[id].snapshot!] : []);
@@ -409,40 +447,7 @@ importButton.addEventListener("click", () => importFile.click());
 importFile.addEventListener("change", () => {
   const file = importFile.files?.[0];
   if (!file) return;
-  void (async () => {
-    setDataControlsDisabled(true);
-    setDataStatus("");
-    try {
-      if (file.size > MAX_BACKUP_BYTES) {
-        throw new Error("The selected backup is larger than 1 MiB.");
-      }
-      const parsed = parseBackupText(await file.text());
-      if (!parsed.ok) throw new Error(backupErrorMessage(parsed.error));
-      const exportedOn = backupDate(parsed.backup.exportedAt);
-      if (!confirm(
-        `Import backup from ${exportedOn}?\n\nThis will replace all local Slop Pacer data.`,
-      )) {
-        setDataStatus("Import cancelled");
-        return;
-      }
-      const result = await send<ImportDataResult>({
-        type: "IMPORT_DATA",
-        backup: parsed.backup,
-      });
-      if (!result.ok) throw new Error(backupErrorMessage(result.error));
-      render(result.state);
-      populateSettings();
-      setDataStatus(`Imported backup from ${backupDate(result.exportedAt)}`);
-    } catch (error: unknown) {
-      setDataStatus(
-        error instanceof Error ? error.message : "Slop Pacer could not restore that backup.",
-        true,
-      );
-    } finally {
-      importFile.value = "";
-      setDataControlsDisabled(false);
-    }
-  })();
+  void importBackupFile(file);
 });
 
 resetButton.addEventListener("click", async () => {

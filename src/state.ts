@@ -51,11 +51,12 @@ export async function saveState(state: ExtensionState): Promise<void> {
 export async function restoreBackup(value: unknown): Promise<ImportDataResult> {
   const parsed = parseBackupValue(value);
   if (!parsed.ok) return parsed;
-  await saveState(parsed.backup.state);
+  const { state, exportedAt } = parsed.backup;
+  await saveState(state);
   return {
     ok: true,
-    state: parsed.backup.state,
-    exportedAt: parsed.backup.exportedAt,
+    state,
+    exportedAt,
   };
 }
 

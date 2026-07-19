@@ -13,7 +13,12 @@ import {
   updateProvider,
 } from "./state";
 import { normalizeSyncMinutes } from "./sync";
-import { PROVIDER_IDS, type ExtensionMessage, type ProviderId } from "./types";
+import {
+  PROVIDER_IDS,
+  type ExtensionMessage,
+  type ExtensionState,
+  type ProviderId,
+} from "./types";
 
 const REFRESH_ALARM = "refresh-ai-usage";
 const stateTasks = new SerialTaskQueue();
@@ -109,7 +114,7 @@ async function importData(backup: unknown): Promise<ImportDataResult> {
   });
 }
 
-async function openSignIn(provider: ProviderId) {
+async function openSignIn(provider: ProviderId): Promise<ExtensionState> {
   await chrome.tabs.create({ url: providerUsageUrl(provider), active: true });
   return stateTasks.run(() => updateProvider(provider, {
     status: "checking",
@@ -123,36 +128,48 @@ async function acceptPageUsage(message: Extract<ExtensionMessage, { type: "PAGE_
   await updateBadge();
 }
 
-chrome.runtime.onInstalled.addListener(() => { void ensureInitialized().then(refreshScheduled); });
-chrome.runtime.onStartup.addListener(() => { void ensureInitialized().then(refreshScheduled); });
-chrome.alarms.onAlarm.addListener((alarm) => { if (alarm.name === REFRESH_ALARM) void refreshScheduled(); });
-
-chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendResponse) => {
-  void (async () => {
-    if (message.type === "GET_STATE") sendResponse(await stateTasks.run(getState));
-    else if (message.type === "REFRESH_ALL") { await refreshAll(true); sendResponse(await stateTasks.run(getState)); }
-    else if (message.type === "SAVE_SETTINGS") {
-      const state = await stateTasks.run(async () => {
-        const saved = await saveSettings(
+async function handleMessage(message: ExtensionMessage): Promise<unknown> {
+  switch (message.type) {
+    case "GET_STATE":
+      return stateTasks.run(getState);
+    case "REFRESH_ALL":
+      await refreshAll(true);
+      return stateTasks.run(getState);
+    case "SAVE_SETTINGS":
+      return stateTasks.run(async () => {
+        const state = await saveSettings(
           message.budgets,
           message.retentionMonths,
           message.syncMinutes,
           message.allowScheduledCursorFocus,
         );
-        await scheduleRefresh(saved.settings.syncMinutes);
-        return saved;
+        await scheduleRefresh(state.settings.syncMinutes);
+        return state;
       });
-      sendResponse(state);
-    }
-    else if (message.type === "OPEN_SIGN_IN") sendResponse(await openSignIn(message.provider));
-    else if (message.type === "PAGE_USAGE") {
+    case "OPEN_SIGN_IN":
+      return openSignIn(message.provider);
+    case "PAGE_USAGE":
       await stateTasks.run(() => acceptPageUsage(message));
-      sendResponse({ ok: true });
+      return { ok: true };
+    case "EXPORT_DATA":
+      return createBackup(await stateTasks.run(getState));
+    case "IMPORT_DATA":
+      return importData(message.backup);
+    case "RESET_HISTORY":
+      return stateTasks.run(resetHistory);
+    default: {
+      const exhaustiveMessage: never = message;
+      return exhaustiveMessage;
     }
-    else if (message.type === "EXPORT_DATA") sendResponse(createBackup(await stateTasks.run(getState)));
-    else if (message.type === "IMPORT_DATA") sendResponse(await importData(message.backup));
-    else if (message.type === "RESET_HISTORY") sendResponse(await stateTasks.run(resetHistory));
-  })().catch((error: unknown) => {
+  }
+}
+
+chrome.runtime.onInstalled.addListener(() => { void ensureInitialized().then(refreshScheduled); });
+chrome.runtime.onStartup.addListener(() => { void ensureInitialized().then(refreshScheduled); });
+chrome.alarms.onAlarm.addListener((alarm) => { if (alarm.name === REFRESH_ALARM) void refreshScheduled(); });
+
+chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendResponse) => {
+  void handleMessage(message).then(sendResponse).catch((error: unknown) => {
     if (message.type === "IMPORT_DATA") {
       const result: ImportDataResult = { ok: false, error: "import_failed" };
       sendResponse(result);
