@@ -167,29 +167,64 @@ function cutoffDate(months: number): string {
   return cutoff.toISOString().slice(0, 10);
 }
 
+function enumerateDates(start: string, end: string): string[] {
+  const dates: string[] = [];
+  const cursor = new Date(`${start}T12:00:00Z`);
+  const last = new Date(`${end}T12:00:00Z`);
+  while (cursor <= last) {
+    dates.push(cursor.toISOString().slice(0, 10));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return dates;
+}
+
 export async function recordSnapshot(snapshot: ProviderSnapshot): Promise<ExtensionState> {
   const state = await getState();
   const provider = state.providers[snapshot.provider];
   const date = snapshot.capturedAt.slice(0, 10);
   const previous = provider.snapshot;
   const sameCycle = previous?.cycleStart === snapshot.cycleStart;
-  const priorEquivalent = sameCycle ? previous.equivalentUsedUsd : 0;
-  const priorActual = sameCycle ? previous.actualUsedUsd : undefined;
-  const priorNative = sameCycle ? previous.nativeUsed : 0;
-  const delta: DailyUsage = {
-    date,
-    equivalentUsedUsd: snapshot.equivalentUsedUsd - priorEquivalent,
-    actualUsedUsd: snapshot.actualUsedUsd === undefined ? undefined : snapshot.actualUsedUsd - (priorActual ?? 0),
-    nativeUsed: snapshot.nativeUsed - priorNative,
-  };
-  const history = provider.history.filter((item) => item.date !== date);
-  const existing = provider.history.find((item) => item.date === date);
-  history.push({
-    date,
-    equivalentUsedUsd: (existing?.equivalentUsedUsd ?? 0) + delta.equivalentUsedUsd,
-    actualUsedUsd: delta.actualUsedUsd === undefined ? existing?.actualUsedUsd : (existing?.actualUsedUsd ?? 0) + delta.actualUsedUsd,
-    nativeUsed: (existing?.nativeUsed ?? 0) + (delta.nativeUsed ?? 0),
-  });
+  const hasCycleHistory = provider.history.some(
+    (item) => item.date >= snapshot.cycleStart && item.date <= date,
+  );
+  const spreadDates = enumerateDates(snapshot.cycleStart, date);
+
+  let history: DailyUsage[];
+  if (!sameCycle && !hasCycleHistory && spreadDates.length > 1 && snapshot.equivalentUsedUsd > 0) {
+    // First reading for this cycle with no recorded days yet: spread the captured
+    // month-to-date evenly across every elapsed day instead of dumping the whole
+    // month's spend onto the capture day. Later same-cycle captures fall through to
+    // the delta path below and attribute only the incremental spend to that day.
+    const divisor = spreadDates.length;
+    const spread: DailyUsage[] = spreadDates.map((spreadDate) => ({
+      date: spreadDate,
+      equivalentUsedUsd: snapshot.equivalentUsedUsd / divisor,
+      actualUsedUsd: snapshot.actualUsedUsd === undefined ? undefined : snapshot.actualUsedUsd / divisor,
+      nativeUsed: snapshot.nativeUsed / divisor,
+    }));
+    history = [...provider.history, ...spread];
+  } else {
+    const priorEquivalent = sameCycle ? previous.equivalentUsedUsd : 0;
+    const priorActual = sameCycle ? previous.actualUsedUsd : undefined;
+    const priorNative = sameCycle ? previous.nativeUsed : 0;
+    const delta: DailyUsage = {
+      date,
+      equivalentUsedUsd: snapshot.equivalentUsedUsd - priorEquivalent,
+      actualUsedUsd: snapshot.actualUsedUsd === undefined ? undefined : snapshot.actualUsedUsd - (priorActual ?? 0),
+      nativeUsed: snapshot.nativeUsed - priorNative,
+    };
+    const existing = provider.history.find((item) => item.date === date);
+    history = [
+      ...provider.history.filter((item) => item.date !== date),
+      {
+        date,
+        equivalentUsedUsd: (existing?.equivalentUsedUsd ?? 0) + delta.equivalentUsedUsd,
+        actualUsedUsd: delta.actualUsedUsd === undefined ? existing?.actualUsedUsd : (existing?.actualUsedUsd ?? 0) + delta.actualUsedUsd,
+        nativeUsed: (existing?.nativeUsed ?? 0) + (delta.nativeUsed ?? 0),
+      },
+    ];
+  }
+
   const cutoff = cutoffDate(state.settings.retentionMonths);
   provider.history = history.filter((item) => item.date >= cutoff).sort((a, b) => a.date.localeCompare(b.date));
   provider.snapshot = snapshot;

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createBackup } from "../src/backup";
-import { createInitialState, getState, restoreBackup, saveSettings } from "../src/state";
+import { normalizeUsd } from "../src/normalization";
+import { createInitialState, getState, recordSnapshot, restoreBackup, saveSettings } from "../src/state";
 
 describe("extension settings", () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -162,6 +163,61 @@ describe("extension settings", () => {
       allowScheduledCursorFocus: false,
     });
     expect(() => createBackup(state, "2026-07-19T12:00:00.000Z")).not.toThrow();
+  });
+});
+
+describe("recordSnapshot first capture", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  function stubStorage(): void {
+    let stored = createInitialState();
+    vi.stubGlobal("chrome", {
+      storage: {
+        local: {
+          get: vi.fn(async () => ({ aiUsageMeterState: stored })),
+          set: vi.fn(async ({ aiUsageMeterState }) => { stored = aiUsageMeterState; }),
+        },
+      },
+    });
+  }
+
+  it("spreads first-capture month-to-date evenly across elapsed days", async () => {
+    stubStorage();
+    const state = await recordSnapshot(
+      normalizeUsd("claude", 100, 2_000, "2026-07-05T09:00:00.000Z", "2026-07-01", "2026-07-31", "page"),
+    );
+    const history = state.providers.claude.history;
+
+    expect(history.map((entry) => entry.date)).toEqual([
+      "2026-07-01", "2026-07-02", "2026-07-03", "2026-07-04", "2026-07-05",
+    ]);
+    for (const entry of history) expect(entry.equivalentUsedUsd).toBeCloseTo(20);
+    expect(history.reduce((sum, entry) => sum + entry.equivalentUsedUsd, 0)).toBeCloseTo(100);
+  });
+
+  it("records the full amount on a single day when captured on the cycle start", async () => {
+    stubStorage();
+    const state = await recordSnapshot(
+      normalizeUsd("claude", 60, 2_000, "2026-07-01T09:00:00.000Z", "2026-07-01", "2026-07-31", "page"),
+    );
+
+    expect(state.providers.claude.history).toEqual([
+      { date: "2026-07-01", equivalentUsedUsd: 60, actualUsedUsd: 60, nativeUsed: 60 },
+    ]);
+  });
+
+  it("attributes only the incremental delta on later same-cycle captures", async () => {
+    stubStorage();
+    await recordSnapshot(
+      normalizeUsd("claude", 100, 2_000, "2026-07-05T09:00:00.000Z", "2026-07-01", "2026-07-31", "page"),
+    );
+    const state = await recordSnapshot(
+      normalizeUsd("claude", 130, 2_000, "2026-07-05T15:00:00.000Z", "2026-07-01", "2026-07-31", "page"),
+    );
+    const today = state.providers.claude.history.find((entry) => entry.date === "2026-07-05")!;
+
+    expect(today.equivalentUsedUsd).toBeCloseTo(50);
+    expect(state.providers.claude.history.reduce((sum, entry) => sum + entry.equivalentUsedUsd, 0)).toBeCloseTo(130);
   });
 });
 
