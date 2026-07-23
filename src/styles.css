@@ -220,7 +220,6 @@ h1 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.025em; }
 .history-row:last-child { border-bottom: 0; }
 .history-row strong { font-variant-numeric: tabular-nums; }
 .empty-state { margin: 0; padding-top: 48px; color: var(--secondary); text-align: center; font-size: 14px; }
-.view-note { margin: 7px 18px 9px; color: var(--secondary); font-size: 11px; text-align: center; }
 
 .popup-form { display: grid; gap: 10px; padding: 12px 18px 8px; }
 .form-group { overflow: hidden; border: 1px solid var(--hairline); border-radius: 11px; background: var(--surface-strong); }
