@@ -57,13 +57,12 @@
         <section class="history-chart-card" aria-labelledby="history-chart-title">
           <div class="history-chart-heading">
             <h2 id="history-chart-title">Daily usage</h2>
-            <span>Last 30 recorded days</span>
+            <div class="chart-heading-right">
+              <span>Last 30 recorded days</span>
+              <button id="chart-mode-toggle" class="chart-toggle" type="button" aria-pressed="false">By provider</button>
+            </div>
           </div>
-          <div class="history-legend" aria-label="Chart legend">
-            <span class="legend-claude">Claude</span>
-            <span class="legend-chatgpt">ChatGPT</span>
-            <span class="legend-cursor">Cursor</span>
-          </div>
+          <div id="history-legend" class="history-legend" aria-label="Chart legend"></div>
           <div id="history-chart" class="history-chart"></div>
         </section>
         <div id="history-tabs" class="segmented-control" role="tablist" aria-label="History provider"></div>

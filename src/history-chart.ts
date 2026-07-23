@@ -13,6 +13,7 @@ export interface HistoryChartSeries {
 export interface HistoryChartData {
   dates: string[];
   series: HistoryChartSeries[];
+  total: HistoryChartPoint[];
 }
 
 export function prepareHistoryChartData(
@@ -30,5 +31,14 @@ export function prepareHistoryChartData(
       .sort((a, b) => a.date.localeCompare(b.date))
       .map((item) => ({ date: item.date, value: item.equivalentUsedUsd })),
   }));
-  return { dates, series };
+  const totalsByDate = new Map<string, number>();
+  for (const provider of PROVIDER_IDS) {
+    for (const item of histories[provider]) {
+      if (includedDates.has(item.date)) {
+        totalsByDate.set(item.date, (totalsByDate.get(item.date) ?? 0) + item.equivalentUsedUsd);
+      }
+    }
+  }
+  const total = dates.map((date) => ({ date, value: totalsByDate.get(date) ?? 0 }));
+  return { dates, series, total };
 }

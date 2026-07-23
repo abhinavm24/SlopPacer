@@ -5,7 +5,7 @@ import {
   parseBackupText,
   parseBackupValue,
 } from "./backup";
-import { prepareHistoryChartData } from "./history-chart";
+import { prepareHistoryChartData, type HistoryChartPoint } from "./history-chart";
 import {
   parseImportDataResponse,
   type ExtensionMessage,
@@ -30,6 +30,7 @@ const dataStatus = document.querySelector<HTMLOutputElement>("#data-status")!;
 let currentState: ExtensionState;
 let currentView: "overview" | "history" | "settings" | "howto" = "overview";
 let historyProvider: ProviderId = "claude";
+let historyChartMode: "total" | "split" = "total";
 
 function money(value: number): string {
   return new Intl.NumberFormat(undefined, {
@@ -299,13 +300,34 @@ function chartDate(date: string): string {
   return new Date(`${date}T00:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+function updateChartControls(): void {
+  const toggle = document.querySelector<HTMLButtonElement>("#chart-mode-toggle")!;
+  toggle.textContent = historyChartMode === "total" ? "By provider" : "Total";
+  toggle.setAttribute("aria-pressed", String(historyChartMode === "split"));
+  const legend = document.querySelector<HTMLElement>("#history-legend")!;
+  const entries = historyChartMode === "total"
+    ? [{ label: "Total", className: "legend-total" }]
+    : PROVIDER_IDS.map((id) => ({ label: PROVIDERS[id].name, className: `legend-${id}` }));
+  legend.replaceChildren(...entries.map((entry) => {
+    const span = document.createElement("span");
+    span.className = entry.className;
+    span.textContent = entry.label;
+    return span;
+  }));
+}
+
 function renderHistoryChart(): void {
+  updateChartControls();
   const host = document.querySelector<HTMLElement>("#history-chart")!;
   const histories = Object.fromEntries(PROVIDER_IDS.map((provider) => [
     provider,
     currentState.providers[provider].history,
   ])) as Record<ProviderId, typeof currentState.providers[ProviderId]["history"]>;
   const data = prepareHistoryChartData(histories);
+  const renderSeries: { key: string; name: string; points: HistoryChartPoint[] }[] =
+    historyChartMode === "total"
+      ? [{ key: "total", name: "Total", points: data.total }]
+      : data.series.map((series) => ({ key: series.provider, name: PROVIDERS[series.provider].name, points: series.points }));
   if (!data.dates.length) {
     const empty = document.createElement("p");
     empty.className = "chart-empty-state";
@@ -319,7 +341,7 @@ function renderHistoryChart(): void {
   const plot = { left: 42, right: 10, top: 8, bottom: 24 };
   const plotWidth = width - plot.left - plot.right;
   const plotHeight = height - plot.top - plot.bottom;
-  const values = data.series.flatMap((series) => series.points.map((point) => point.value));
+  const values = renderSeries.flatMap((series) => series.points.map((point) => point.value));
   let minimum = Math.min(0, ...values);
   let maximum = Math.max(0, ...values);
   if (minimum === maximum) maximum = minimum + 1;
@@ -336,10 +358,12 @@ function renderHistoryChart(): void {
   const svg = svgElement("svg", {
     viewBox: `0 0 ${width} ${height}`,
     role: "img",
-    "aria-label": "Daily dollar usage for Claude, ChatGPT, and Cursor",
+    "aria-label": historyChartMode === "total"
+      ? "Total daily dollar usage across providers"
+      : "Daily dollar usage for Claude, ChatGPT, and Cursor",
   });
   const title = svgElement("title");
-  title.textContent = "Daily usage by provider";
+  title.textContent = historyChartMode === "total" ? "Daily usage total" : "Daily usage by provider";
   const description = svgElement("desc");
   description.textContent = `${chartDate(firstDate)} through ${chartDate(lastDate)}`;
   svg.append(title, description);
@@ -365,15 +389,15 @@ function renderHistoryChart(): void {
     svg.append(label);
   }
 
-  for (const series of data.series) {
+  for (const series of renderSeries) {
     const pathData = series.points.map((point, index) => `${index ? "L" : "M"}${x(point.date)} ${y(point.value)}`).join(" ");
-    if (pathData) svg.append(svgElement("path", { d: pathData, class: `chart-series series-${series.provider}` }));
+    if (pathData) svg.append(svgElement("path", { d: pathData, class: `chart-series series-${series.key}` }));
     for (const point of series.points) {
       const circle = svgElement("circle", {
-        cx: String(x(point.date)), cy: String(y(point.value)), r: "2.6", class: `chart-point series-${series.provider}`,
+        cx: String(x(point.date)), cy: String(y(point.value)), r: "2.6", class: `chart-point series-${series.key}`,
       });
       const pointTitle = svgElement("title");
-      pointTitle.textContent = `${PROVIDERS[series.provider].name} · ${chartDate(point.date)} · ${chartMoney(point.value)}`;
+      pointTitle.textContent = `${series.name} · ${chartDate(point.date)} · ${chartMoney(point.value)}`;
       circle.append(pointTitle);
       svg.append(circle);
     }
@@ -429,6 +453,10 @@ refreshButton.addEventListener("click", async () => {
 document.querySelector("#home")?.addEventListener("click", () => showView("overview"));
 document.querySelector("#settings")?.addEventListener("click", () => showView("settings"));
 document.querySelector("#details")?.addEventListener("click", () => showView("history"));
+document.querySelector("#chart-mode-toggle")?.addEventListener("click", () => {
+  historyChartMode = historyChartMode === "total" ? "split" : "total";
+  renderHistoryChart();
+});
 document.querySelector("#howto")?.addEventListener("click", () => showView("howto"));
 
 form.addEventListener("submit", (event) => {
