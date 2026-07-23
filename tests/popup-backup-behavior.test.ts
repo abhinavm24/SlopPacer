@@ -254,7 +254,7 @@ describe("popup backup import behavior", () => {
     const popup = await setupPopup((message) => {
       if (message.type === "IMPORT_DATA") return workerResponse.promise;
       throw new Error(`Unexpected ${message.type} message`);
-    });
+    }, stateWithClaudeSnapshot());
     const importedState = stateWithClaudeSnapshot({ claude: 900, chatgpt: 800, cursor: 700 });
     importedState.settings.syncMinutes = 60;
     importedState.settings.retentionMonths = 6;
@@ -262,6 +262,7 @@ describe("popup backup import behavior", () => {
     const backup = createBackup(importedState, exportedAt);
     const { file } = createFile(backup);
     const originalMonth = document.querySelector("#month-label")?.textContent;
+    expect(originalMonth).toBe("$400 / $6,000");
 
     selectFile(popup.importFile, file);
     await vi.waitFor(() => {
@@ -279,7 +280,7 @@ describe("popup backup import behavior", () => {
     await vi.waitFor(() => {
       expect(popup.dataStatus.textContent).toContain("Imported backup from");
     });
-    expect(document.querySelector("#month-label")?.textContent).not.toBe(originalMonth);
+    expect(document.querySelector("#month-label")?.textContent).toBe("$400 / $2,400");
     expect((document.querySelector('[name="claude"]') as HTMLInputElement).value).toBe("900");
     expect((document.querySelector('[name="syncMinutes"]') as HTMLInputElement).value).toBe("60");
     expect((document.querySelector('[name="retentionMonths"]') as HTMLInputElement).value).toBe("6");

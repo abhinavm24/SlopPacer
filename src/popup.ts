@@ -77,6 +77,7 @@ function renderSummary(summary: SummaryBreakdown | undefined): void {
       const fill = document.querySelector<HTMLElement>(`#${fillId}`)!;
       fill.style.width = "0%";
       fill.className = "";
+      fill.parentElement?.setAttribute("aria-valuenow", "0");
       document.querySelector(`#${labelId}`)!.textContent = "";
     }
     return;
