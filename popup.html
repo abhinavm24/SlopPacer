@@ -100,20 +100,20 @@
       <section id="howto-view" class="popup-view subview howto-view" hidden>
         <div class="howto-content">
           <section>
-            <h2>Collects account usage</h2>
-            <p>Slop Pacer checks Claude, ChatGPT, and Cursor at your chosen interval (15 minutes by default) using your signed-in browser sessions. When needed, it briefly opens a Usage tab and closes only the tab it created. Cursor must be temporarily shown because its dashboard does not load usage data while hidden. Scheduled refreshes do this only when enabled in Settings.</p>
+            <h2>Collects usage</h2>
+            <p>Reads your month-to-date usage from Claude, ChatGPT, and Cursor's own Usage pages via your signed-in browser sessions — no API keys. It reuses an open Usage tab or briefly opens and closes one; Cursor is shown for a moment because its dashboard won't load while hidden (scheduled refreshes do this only if enabled in Settings). Refreshes on your chosen interval (15 min default).</p>
           </section>
           <section>
-            <h2>Tracks month to date</h2>
-            <p>Usage is normalized against each monthly budget. Cursor is always opened with a first-of-month through today date range.</p>
+            <h2>Tracks against budget</h2>
+            <p>Each provider's spend is normalized against its monthly budget and combined; Cursor credits are converted to dollars.</p>
           </section>
           <section>
             <h2>Splits spend by period</h2>
-            <p>The summary shows <strong>Today</strong>, <strong>Week</strong> (Mon–Fri), and <strong>Month</strong> spend. <strong>allowance</strong> is what is safe to spend today — the budget left this month divided by remaining workdays; the bracketed figure spreads it over all remaining days. <strong>proj</strong> projects month-end at your current workday pace, and <strong>left</strong> is the budget minus month-to-date.</p>
+            <p>The summary shows <strong>Today</strong>, <strong>Week</strong> (Mon–Fri), and <strong>Month</strong> spend. <strong>allowance</strong> is what's safe to spend today — budget left ÷ remaining workdays (bracket: ÷ all remaining days). <strong>proj</strong> is projected month-end at your current workday pace; <strong>left</strong> is budget minus month-to-date. Each provider row also shows its % remaining and average/available per workday.</p>
           </section>
           <section>
             <h2>Stays local</h2>
-            <p>Budgets, snapshots, and history remain in browser storage. Settings lets you export a local backup or restore one, replacing current Slop Pacer data after confirmation.</p>
+            <p>Budgets, snapshots, and history stay in browser storage; cookies, tokens, and raw responses are never saved. Settings can export or restore a local backup, replacing current data after confirmation.</p>
           </section>
           <p class="pace-key"><span class="text-green">Green: under 80%</span><span class="text-amber">Amber: 80–100%</span><span class="text-red">Red: over</span></p>
         </div>
