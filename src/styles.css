@@ -47,7 +47,7 @@ button { cursor: pointer; }
 }
 
 .popup-view { height: 514px; overflow: hidden; }
-#overview-view { display: flex; flex-direction: column; }
+#overview-view, #history-view { display: flex; flex-direction: column; }
 
 .popup-header {
   display: grid;
@@ -215,7 +215,7 @@ h1 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.025em; }
 .segmented-control { display: grid; grid-template-columns: repeat(3, 1fr); margin: 7px 18px; padding: 2px; border-radius: 9px; background: var(--track); }
 .segmented-control button { padding: 6px 8px; border: 0; border-radius: 7px; background: transparent; color: var(--secondary); font-size: 13px; font-weight: 550; }
 .segmented-control button[aria-selected="true"] { background: var(--surface-strong); color: var(--text); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); }
-.history-list { height: 121px; overflow-y: auto; border-top: 1px solid var(--hairline); border-bottom: 1px solid var(--hairline); background: var(--surface-strong); }
+.history-list { flex: 1; min-height: 121px; overflow-y: auto; border-top: 1px solid var(--hairline); border-bottom: 1px solid var(--hairline); background: var(--surface-strong); }
 .history-row { display: flex; min-height: 44px; align-items: center; justify-content: space-between; margin-left: 18px; padding: 0 18px 0 0; border-bottom: 1px solid var(--hairline); font-size: 14px; }
 .history-row:last-child { border-bottom: 0; }
 .history-row strong { font-variant-numeric: tabular-nums; }
