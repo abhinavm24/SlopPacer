@@ -41,12 +41,12 @@ button { cursor: pointer; }
 
 .shell {
   width: 410px;
-  height: 478px;
+  height: 570px;
   overflow: hidden;
   background: var(--surface);
 }
 
-.popup-view { height: 422px; overflow: hidden; }
+.popup-view { height: 514px; overflow: hidden; }
 #overview-view { display: flex; flex-direction: column; }
 
 .popup-header {
@@ -134,7 +134,7 @@ h1 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.025em; }
 .text-amber { color: var(--amber-text); }
 .text-red { color: var(--red-text); }
 
-#providers { display: grid; flex: 1; grid-template-rows: repeat(3, minmax(0, 1fr)); background: var(--surface-list); }
+#providers { display: grid; flex: 1; min-height: 0; grid-template-rows: repeat(3, minmax(88px, 1fr)); overflow-y: auto; background: var(--surface-list); }
 
 .provider-row {
   display: grid;
