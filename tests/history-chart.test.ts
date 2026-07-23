@@ -17,6 +17,19 @@ describe("history chart data", () => {
     ]);
   });
 
+  it("consolidates providers into a daily total across the full axis", () => {
+    const chart = prepareHistoryChartData({
+      claude: [{ date: "2026-07-17", equivalentUsedUsd: 12 }],
+      chatgpt: [{ date: "2026-07-16", equivalentUsedUsd: 8 }],
+      cursor: [{ date: "2026-07-17", equivalentUsedUsd: 3 }],
+    });
+
+    expect(chart.total).toEqual([
+      { date: "2026-07-16", value: 8 },
+      { date: "2026-07-17", value: 15 },
+    ]);
+  });
+
   it("limits the shared axis to the most recent recorded dates", () => {
     const claude = Array.from({ length: 35 }, (_, index) => ({
       date: new Date(Date.UTC(2026, 5, 1 + index)).toISOString().slice(0, 10),

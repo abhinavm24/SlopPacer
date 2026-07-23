@@ -30,14 +30,25 @@
       <div id="overview-view" class="popup-view">
         <section class="summary" aria-label="Combined budget">
           <div class="summary-top">
-            <div><strong id="combined-used">—</strong><span id="combined-limit">of —</span></div>
+            <strong id="combined-today">—</strong>
             <span id="summary-days" class="summary-days">Current month</span>
           </div>
-          <div class="summary-metrics">
-            <span id="combined-remaining" class="summary-remaining">No usage yet</span>
-            <span id="summary-pacing" class="summary-pacing">No pacing yet</span>
+          <div id="summary-allowance" class="summary-allowance">No usage yet</div>
+          <div class="period-bars">
+            <div class="period">
+              <div class="period-head"><span>Today</span><span id="today-label" class="period-value"></span></div>
+              <div class="usage-bar period-bar" role="progressbar" aria-label="Today versus allowance"><span id="today-fill"></span></div>
+            </div>
+            <div class="period">
+              <div class="period-head"><span>Week</span><span id="week-label" class="period-value"></span></div>
+              <div class="usage-bar period-bar" role="progressbar" aria-label="This week versus weekly pace"><span id="week-fill"></span></div>
+            </div>
+            <div class="period">
+              <div class="period-head"><span>Month</span><span id="month-label" class="period-value"></span></div>
+              <div class="usage-bar period-bar" role="progressbar" aria-label="This month versus budget"><span id="month-fill"></span></div>
+            </div>
           </div>
-          <div class="usage-bar summary-bar" role="progressbar" aria-label="Combined budget used"><span id="combined-bar"></span></div>
+          <div id="summary-foot" class="summary-foot"></div>
         </section>
         <section id="providers" aria-label="Providers"></section>
       </div>
@@ -46,13 +57,12 @@
         <section class="history-chart-card" aria-labelledby="history-chart-title">
           <div class="history-chart-heading">
             <h2 id="history-chart-title">Daily usage</h2>
-            <span>Last 30 recorded days</span>
+            <div class="chart-heading-right">
+              <span>Last 30 recorded days</span>
+              <button id="chart-mode-toggle" class="chart-toggle" type="button" aria-pressed="false">By provider</button>
+            </div>
           </div>
-          <div class="history-legend" aria-label="Chart legend">
-            <span class="legend-claude">Claude</span>
-            <span class="legend-chatgpt">ChatGPT</span>
-            <span class="legend-cursor">Cursor</span>
-          </div>
+          <div id="history-legend" class="history-legend" aria-label="Chart legend"></div>
           <div id="history-chart" class="history-chart"></div>
         </section>
         <div id="history-tabs" class="segmented-control" role="tablist" aria-label="History provider"></div>
@@ -89,22 +99,22 @@
       <section id="howto-view" class="popup-view subview howto-view" hidden>
         <div class="howto-content">
           <section>
-            <h2>Collects account usage</h2>
-            <p>Slop Pacer checks Claude, ChatGPT, and Cursor at your chosen interval (15 minutes by default) using your signed-in browser sessions. When needed, it briefly opens a Usage tab and closes only the tab it created. Cursor must be temporarily shown because its dashboard does not load usage data while hidden. Scheduled refreshes do this only when enabled in Settings.</p>
+            <h2>Collects usage</h2>
+            <p>Reads your month-to-date usage from Claude, ChatGPT, and Cursor's own Usage pages via your signed-in browser sessions — no API keys. It reuses an open Usage tab or briefly opens and closes one; Cursor is shown for a moment because its dashboard won't load while hidden (scheduled refreshes do this only if enabled in Settings). Refreshes on your chosen interval (15 min default).</p>
           </section>
           <section>
-            <h2>Tracks month to date</h2>
-            <p>Usage is normalized against each monthly budget. Cursor is always opened with a first-of-month through today date range.</p>
+            <h2>Tracks against budget</h2>
+            <p>Each provider's spend is normalized against its monthly budget and combined; Cursor credits are converted to dollars.</p>
           </section>
           <section>
-            <h2>Explains your pace</h2>
-            <p><strong>Avg</strong> is usage per elapsed workday. <strong>Available</strong> is what remains for each workday through the month.</p>
+            <h2>Splits spend by period</h2>
+            <p>The summary shows <strong>Today</strong>, <strong>Week</strong> (Mon–Fri), and <strong>Month</strong> spend. <strong>allowance</strong> is what's safe to spend today — budget left ÷ remaining workdays (bracket: ÷ all remaining days). <strong>proj</strong> is projected month-end at your current workday pace; <strong>left</strong> is budget minus month-to-date. Each provider row also shows its % remaining and average/available per workday.</p>
           </section>
           <section>
             <h2>Stays local</h2>
-            <p>Budgets, snapshots, and history remain in browser storage. Settings lets you export a local backup or restore one, replacing current Slop Pacer data after confirmation.</p>
+            <p>Budgets, snapshots, and history stay in browser storage; cookies, tokens, and raw responses are never saved. Settings can export or restore a local backup, replacing current data after confirmation.</p>
           </section>
-          <p class="pace-key"><span class="pace-under">Green: below pace</span><span>Neutral: aligned</span><span class="pace-over">Red: above pace</span></p>
+          <p class="pace-key"><span class="text-green">Green: under 80%</span><span class="text-amber">Amber: 80–100%</span><span class="text-red">Red: over</span></p>
         </div>
       </section>
     </main>

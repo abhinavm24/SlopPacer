@@ -10,9 +10,11 @@ Each provider has a configurable monthly budget (default: **$2,000**). The exten
 refreshes on a configurable interval (15 minutes by default), keeps normalized daily history locally, and shows both the
 combined budget and provider-level detail. History plots Claude, ChatGPT, and Cursor together on a shared daily-dollar chart.
 
-The extension includes rendered Usage-page collectors, local daily history,
-session recovery, export/import/reset controls, and in-popup Overview, History,
-Settings, and How It Works views.
+The combined Overview splits spend into Today, Week (Mon–Fri), and Month bars
+against a pace-based allowance, with a projected month-end total (proj) and
+remaining budget (left). The extension includes rendered Usage-page collectors,
+local daily history, session recovery, export/import/reset controls, and in-popup
+Overview, History, Settings, and How It Works views.
 
 ## Development
 

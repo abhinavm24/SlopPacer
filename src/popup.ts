@@ -5,7 +5,7 @@ import {
   parseBackupText,
   parseBackupValue,
 } from "./backup";
-import { prepareHistoryChartData } from "./history-chart";
+import { prepareHistoryChartData, type HistoryChartPoint } from "./history-chart";
 import {
   parseImportDataResponse,
   type ExtensionMessage,
@@ -13,6 +13,7 @@ import {
 } from "./messages";
 import { combineSnapshots } from "./normalization";
 import { calculatePacing, type PacingMetrics } from "./pacing";
+import { computeSummary, fillStatus, type SummaryBreakdown } from "./periods";
 import { PROVIDERS } from "./providers";
 import { PROVIDER_IDS, type ExtensionState, type ProviderId } from "./types";
 
@@ -29,6 +30,7 @@ const dataStatus = document.querySelector<HTMLOutputElement>("#data-status")!;
 let currentState: ExtensionState;
 let currentView: "overview" | "history" | "settings" | "howto" = "overview";
 let historyProvider: ProviderId = "claude";
+let historyChartMode: "total" | "split" = "total";
 
 function money(value: number): string {
   return new Intl.NumberFormat(undefined, {
@@ -46,15 +48,49 @@ function pacingText(pacing: PacingMetrics): string {
   return `Avg ${money(pacing.averagePerElapsedDay)}/day · Available ${money(pacing.requiredPerRemainingDay)}/day`;
 }
 
-function paceClass(pacing: PacingMetrics): string {
-  return `pace-${pacing.paceStatus.replace("_", "-")}`;
+function setFill(fill: HTMLElement, spent: number, target: number): void {
+  const value = target <= 0 ? (spent > 0 ? 100 : 0) : Math.max(0, Math.min(100, (spent / target) * 100));
+  fill.style.width = `${value}%`;
+  fill.className = `fill-${fillStatus(spent, target)}`;
+  fill.parentElement?.setAttribute("aria-valuenow", String(Math.round(value)));
 }
 
-function setBar(bar: HTMLElement, usedPercent: number, pacing: PacingMetrics): void {
-  const value = Math.max(0, Math.min(100, usedPercent));
-  bar.style.width = `${value}%`;
-  bar.className = paceClass(pacing);
-  bar.parentElement?.setAttribute("aria-valuenow", String(Math.round(value)));
+function setPeriodBar(fillId: string, labelId: string, spent: number, target: number): void {
+  setFill(document.querySelector<HTMLElement>(`#${fillId}`)!, spent, target);
+  document.querySelector(`#${labelId}`)!.textContent = `${money(spent)} / ${money(target)}`;
+}
+
+function renderSummary(summary: SummaryBreakdown | undefined): void {
+  const today = document.querySelector<HTMLElement>("#combined-today")!;
+  const days = document.querySelector<HTMLElement>("#summary-days")!;
+  const allowance = document.querySelector<HTMLElement>("#summary-allowance")!;
+  const foot = document.querySelector<HTMLElement>("#summary-foot")!;
+  if (!summary) {
+    today.textContent = "—";
+    days.textContent = "Current month";
+    allowance.textContent = "No usage yet";
+    foot.textContent = "";
+    for (const [fillId, labelId] of [
+      ["today-fill", "today-label"],
+      ["week-fill", "week-label"],
+      ["month-fill", "month-label"],
+    ] as const) {
+      const fill = document.querySelector<HTMLElement>(`#${fillId}`)!;
+      fill.style.width = "0%";
+      fill.className = "";
+      fill.parentElement?.setAttribute("aria-valuenow", "0");
+      document.querySelector(`#${labelId}`)!.textContent = "";
+    }
+    return;
+  }
+  today.textContent = money(summary.todaySpent);
+  days.textContent = `${summary.remainingWorkingDays} days left`;
+  allowance.textContent =
+    `today · allowance ${money(summary.todayAllowance)} (${money(summary.todayAllowanceAllDays)})`;
+  setPeriodBar("today-fill", "today-label", summary.todaySpent, summary.todayAllowance);
+  setPeriodBar("week-fill", "week-label", summary.weekSpent, summary.weekTarget);
+  setPeriodBar("month-fill", "month-label", summary.monthSpent, summary.monthBudget);
+  foot.textContent = `proj ${money(summary.projectedMonth)} · left ${money(summary.left)}`;
 }
 
 function chevron(): SVGSVGElement {
@@ -136,26 +172,18 @@ function render(state: ExtensionState): void {
   const snapshots = PROVIDER_IDS.flatMap((id) => state.providers[id].snapshot ? [state.providers[id].snapshot!] : []);
   const combined = combineSnapshots(snapshots);
   const combinedBudget = PROVIDER_IDS.reduce((sum, id) => sum + state.providers[id].budgetUsd, 0);
-  const combinedRemaining = Math.max(0, combinedBudget - combined.usedUsd);
-  const combinedRemainingPercent = combinedBudget ? (combinedRemaining / combinedBudget) * 100 : 0;
   const cycle = snapshots[0];
-  const combinedPacing = cycle
-    ? calculatePacing(combined.usedUsd, combinedBudget, cycle.cycleStart, cycle.cycleEnd)
+  const summary = cycle
+    ? computeSummary(
+        PROVIDER_IDS.map((id) => state.providers[id].history),
+        combined.usedUsd,
+        combinedBudget,
+        cycle.cycleStart,
+        cycle.cycleEnd,
+      )
     : undefined;
 
-  document.querySelector("#combined-used")!.textContent = snapshots.length ? money(combined.usedUsd) : "—";
-  document.querySelector("#combined-limit")!.textContent = `of ${money(combinedBudget)}`;
-  document.querySelector("#summary-days")!.textContent = combinedPacing
-    ? `${combinedPacing.remainingWorkingDays} days left`
-    : "Current month";
-  const remaining = document.querySelector<HTMLElement>("#combined-remaining")!;
-  remaining.textContent = snapshots.length ? `${percent(combinedRemainingPercent)} remaining` : "No usage yet";
-  remaining.className = combinedPacing ? `summary-remaining ${paceClass(combinedPacing)}` : "summary-remaining";
-  const combinedBar = document.querySelector<HTMLElement>("#combined-bar")!;
-  if (combinedPacing) setBar(combinedBar, combinedBudget ? (combined.usedUsd / combinedBudget) * 100 : 0, combinedPacing);
-  document.querySelector("#summary-pacing")!.textContent = combinedPacing
-    ? `Avg ${money(combinedPacing.averagePerElapsedDay)}/day · Available ${money(combinedPacing.requiredPerRemainingDay)}/day`
-    : "No pacing yet";
+  renderSummary(summary);
 
   providersHost.replaceChildren(...PROVIDER_IDS.map((id) => {
     const provider = state.providers[id];
@@ -183,10 +211,11 @@ function render(state: ExtensionState): void {
 
     if (snapshot) {
       const pacing = calculatePacing(snapshot.equivalentUsedUsd, snapshot.budgetUsd, snapshot.cycleStart, snapshot.cycleEnd);
+      const status = fillStatus(snapshot.equivalentUsedUsd, snapshot.budgetUsd);
       const metrics = document.createElement("div");
       metrics.className = "provider-metrics";
       const remainingLabel = document.createElement("strong");
-      remainingLabel.className = paceClass(pacing);
+      remainingLabel.className = `text-${status}`;
       remainingLabel.textContent = `${percent(pacing.remainingPercent)} remaining`;
       const pace = document.createElement("span");
       pace.textContent = pacingText(pacing);
@@ -195,7 +224,7 @@ function render(state: ExtensionState): void {
       bar.setAttribute("role", "progressbar");
       bar.setAttribute("aria-label", `${PROVIDERS[id].name} budget used`);
       const fill = document.createElement("span");
-      setBar(fill, snapshot.utilizationPercent, pacing);
+      setFill(fill, snapshot.equivalentUsedUsd, snapshot.budgetUsd);
       bar.append(fill);
       metrics.append(remainingLabel, pace, bar);
       row.append(metrics);
@@ -271,13 +300,34 @@ function chartDate(date: string): string {
   return new Date(`${date}T00:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+function updateChartControls(): void {
+  const toggle = document.querySelector<HTMLButtonElement>("#chart-mode-toggle")!;
+  toggle.textContent = historyChartMode === "total" ? "By provider" : "Total";
+  toggle.setAttribute("aria-pressed", String(historyChartMode === "split"));
+  const legend = document.querySelector<HTMLElement>("#history-legend")!;
+  const entries = historyChartMode === "total"
+    ? [{ label: "Total", className: "legend-total" }]
+    : PROVIDER_IDS.map((id) => ({ label: PROVIDERS[id].name, className: `legend-${id}` }));
+  legend.replaceChildren(...entries.map((entry) => {
+    const span = document.createElement("span");
+    span.className = entry.className;
+    span.textContent = entry.label;
+    return span;
+  }));
+}
+
 function renderHistoryChart(): void {
+  updateChartControls();
   const host = document.querySelector<HTMLElement>("#history-chart")!;
   const histories = Object.fromEntries(PROVIDER_IDS.map((provider) => [
     provider,
     currentState.providers[provider].history,
   ])) as Record<ProviderId, typeof currentState.providers[ProviderId]["history"]>;
   const data = prepareHistoryChartData(histories);
+  const renderSeries: { key: string; name: string; points: HistoryChartPoint[] }[] =
+    historyChartMode === "total"
+      ? [{ key: "total", name: "Total", points: data.total }]
+      : data.series.map((series) => ({ key: series.provider, name: PROVIDERS[series.provider].name, points: series.points }));
   if (!data.dates.length) {
     const empty = document.createElement("p");
     empty.className = "chart-empty-state";
@@ -291,7 +341,7 @@ function renderHistoryChart(): void {
   const plot = { left: 42, right: 10, top: 8, bottom: 24 };
   const plotWidth = width - plot.left - plot.right;
   const plotHeight = height - plot.top - plot.bottom;
-  const values = data.series.flatMap((series) => series.points.map((point) => point.value));
+  const values = renderSeries.flatMap((series) => series.points.map((point) => point.value));
   let minimum = Math.min(0, ...values);
   let maximum = Math.max(0, ...values);
   if (minimum === maximum) maximum = minimum + 1;
@@ -308,10 +358,12 @@ function renderHistoryChart(): void {
   const svg = svgElement("svg", {
     viewBox: `0 0 ${width} ${height}`,
     role: "img",
-    "aria-label": "Daily dollar usage for Claude, ChatGPT, and Cursor",
+    "aria-label": historyChartMode === "total"
+      ? "Total daily dollar usage across providers"
+      : "Daily dollar usage for Claude, ChatGPT, and Cursor",
   });
   const title = svgElement("title");
-  title.textContent = "Daily usage by provider";
+  title.textContent = historyChartMode === "total" ? "Daily usage total" : "Daily usage by provider";
   const description = svgElement("desc");
   description.textContent = `${chartDate(firstDate)} through ${chartDate(lastDate)}`;
   svg.append(title, description);
@@ -337,15 +389,15 @@ function renderHistoryChart(): void {
     svg.append(label);
   }
 
-  for (const series of data.series) {
+  for (const series of renderSeries) {
     const pathData = series.points.map((point, index) => `${index ? "L" : "M"}${x(point.date)} ${y(point.value)}`).join(" ");
-    if (pathData) svg.append(svgElement("path", { d: pathData, class: `chart-series series-${series.provider}` }));
+    if (pathData) svg.append(svgElement("path", { d: pathData, class: `chart-series series-${series.key}` }));
     for (const point of series.points) {
       const circle = svgElement("circle", {
-        cx: String(x(point.date)), cy: String(y(point.value)), r: "2.6", class: `chart-point series-${series.provider}`,
+        cx: String(x(point.date)), cy: String(y(point.value)), r: "2.6", class: `chart-point series-${series.key}`,
       });
       const pointTitle = svgElement("title");
-      pointTitle.textContent = `${PROVIDERS[series.provider].name} · ${chartDate(point.date)} · ${chartMoney(point.value)}`;
+      pointTitle.textContent = `${series.name} · ${chartDate(point.date)} · ${chartMoney(point.value)}`;
       circle.append(pointTitle);
       svg.append(circle);
     }
@@ -401,6 +453,10 @@ refreshButton.addEventListener("click", async () => {
 document.querySelector("#home")?.addEventListener("click", () => showView("overview"));
 document.querySelector("#settings")?.addEventListener("click", () => showView("settings"));
 document.querySelector("#details")?.addEventListener("click", () => showView("history"));
+document.querySelector("#chart-mode-toggle")?.addEventListener("click", () => {
+  historyChartMode = historyChartMode === "total" ? "split" : "total";
+  renderHistoryChart();
+});
 document.querySelector("#howto")?.addEventListener("click", () => showView("howto"));
 
 form.addEventListener("submit", (event) => {

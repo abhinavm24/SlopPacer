@@ -9,7 +9,27 @@ import {
   type BackupFileV1,
 } from "../src/backup";
 import type { ExtensionMessage } from "../src/messages";
+import { normalizeUsd } from "../src/normalization";
 import { createInitialState } from "../src/state";
+import type { ExtensionState, ProviderSnapshot } from "../src/types";
+
+function stateWithClaudeSnapshot(budgets?: Partial<Record<"claude" | "chatgpt" | "cursor", number>>): ExtensionState {
+  const state = createInitialState();
+  if (budgets?.claude !== undefined) state.providers.claude.budgetUsd = budgets.claude;
+  if (budgets?.chatgpt !== undefined) state.providers.chatgpt.budgetUsd = budgets.chatgpt;
+  if (budgets?.cursor !== undefined) state.providers.cursor.budgetUsd = budgets.cursor;
+  state.providers.claude.snapshot = normalizeUsd(
+    "claude",
+    400,
+    state.providers.claude.budgetUsd,
+    "2026-07-17T12:00:00.000Z",
+    "2026-07-01",
+    "2026-07-31",
+    "page",
+  ) as ProviderSnapshot<"claude">;
+  state.providers.claude.history = [{ date: "2026-07-17", equivalentUsedUsd: 400 }];
+  return state;
+}
 
 const testModuleUrl = new URL(import.meta.url);
 if (testModuleUrl.protocol !== "file:") {
@@ -62,15 +82,17 @@ function selectFile(input: HTMLInputElement, file: File): void {
   input.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
-async function setupPopup(handleMessage: MessageHandler = () => {
-  throw new Error("Unexpected popup message");
-}) {
+async function setupPopup(
+  handleMessage: MessageHandler = () => {
+    throw new Error("Unexpected popup message");
+  },
+  initialState: ExtensionState = createInitialState(),
+) {
   vi.resetModules();
   document.open();
   document.write(popupMarkup);
   document.close();
 
-  const initialState = createInitialState();
   const sendMessage = vi.fn((message: ExtensionMessage) => {
     if (message.type === "GET_STATE") return Promise.resolve(initialState);
     return Promise.resolve(handleMessage(message));
@@ -211,10 +233,9 @@ describe("popup backup import behavior", () => {
     const popup = await setupPopup((message) => {
       if (message.type === "IMPORT_DATA") return response();
       throw new Error(`Unexpected ${message.type} message`);
-    });
-    const originalLimit = document.querySelector("#combined-limit")?.textContent;
-    const importedState = createInitialState();
-    importedState.providers.claude.budgetUsd = 9_000;
+    }, stateWithClaudeSnapshot());
+    const originalMonth = document.querySelector("#month-label")?.textContent;
+    const importedState = stateWithClaudeSnapshot({ claude: 9_000 });
     const { file } = createFile(createBackup(importedState, exportedAt));
 
     selectFile(popup.importFile, file);
@@ -222,7 +243,7 @@ describe("popup backup import behavior", () => {
     await vi.waitFor(() => {
       expect(popup.dataStatus.textContent).toBe(status);
     });
-    expect(document.querySelector("#combined-limit")?.textContent).toBe(originalLimit);
+    expect(document.querySelector("#month-label")?.textContent).toBe(originalMonth);
     expect(popup.dataStatus.classList.contains("error")).toBe(true);
     expect(popup.importFile.value).toBe("");
     expectDataControlsEnabled(popup);
@@ -233,17 +254,15 @@ describe("popup backup import behavior", () => {
     const popup = await setupPopup((message) => {
       if (message.type === "IMPORT_DATA") return workerResponse.promise;
       throw new Error(`Unexpected ${message.type} message`);
-    });
-    const importedState = createInitialState();
-    importedState.providers.claude.budgetUsd = 900;
-    importedState.providers.chatgpt.budgetUsd = 800;
-    importedState.providers.cursor.budgetUsd = 700;
+    }, stateWithClaudeSnapshot());
+    const importedState = stateWithClaudeSnapshot({ claude: 900, chatgpt: 800, cursor: 700 });
     importedState.settings.syncMinutes = 60;
     importedState.settings.retentionMonths = 6;
     importedState.settings.allowScheduledCursorFocus = true;
     const backup = createBackup(importedState, exportedAt);
     const { file } = createFile(backup);
-    const originalLimit = document.querySelector("#combined-limit")?.textContent;
+    const originalMonth = document.querySelector("#month-label")?.textContent;
+    expect(originalMonth).toBe("$400 / $6,000");
 
     selectFile(popup.importFile, file);
     await vi.waitFor(() => {
@@ -261,7 +280,7 @@ describe("popup backup import behavior", () => {
     await vi.waitFor(() => {
       expect(popup.dataStatus.textContent).toContain("Imported backup from");
     });
-    expect(document.querySelector("#combined-limit")?.textContent).not.toBe(originalLimit);
+    expect(document.querySelector("#month-label")?.textContent).toBe("$400 / $2,400");
     expect((document.querySelector('[name="claude"]') as HTMLInputElement).value).toBe("900");
     expect((document.querySelector('[name="syncMinutes"]') as HTMLInputElement).value).toBe("60");
     expect((document.querySelector('[name="retentionMonths"]') as HTMLInputElement).value).toBe("6");
