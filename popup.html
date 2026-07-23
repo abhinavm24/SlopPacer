@@ -29,11 +29,23 @@
       </header>
       <div id="overview-view" class="popup-view">
         <section class="summary" aria-label="Combined budget">
-          <div class="summary-top">
-            <strong id="combined-today">—</strong>
-            <span id="summary-days" class="summary-days">Current month</span>
+          <div class="summary-hero">
+            <div id="pace-rings" class="pace-rings" aria-hidden="true">
+              <span class="pace-ring pace-ring-month"></span>
+              <span class="pace-ring pace-ring-week"></span>
+              <span class="pace-ring pace-ring-today"></span>
+              <span class="pace-ring-center">Pace</span>
+            </div>
+            <div class="summary-primary">
+              <span class="metric-eyebrow">Spent today</span>
+              <div class="summary-top">
+                <strong id="combined-today">—</strong>
+                <span id="summary-days" class="summary-days">Current month</span>
+              </div>
+              <div id="summary-allowance" class="summary-allowance">No usage yet</div>
+              <div id="summary-foot" class="summary-foot"></div>
+            </div>
           </div>
-          <div id="summary-allowance" class="summary-allowance">No usage yet</div>
           <div class="period-bars">
             <div class="period">
               <div class="period-head"><span>Today</span><span id="today-label" class="period-value"></span></div>
@@ -48,7 +60,6 @@
               <div class="usage-bar period-bar" role="progressbar" aria-label="This month versus budget"><span id="month-fill"></span></div>
             </div>
           </div>
-          <div id="summary-foot" class="summary-foot"></div>
         </section>
         <section id="providers" aria-label="Providers"></section>
       </div>

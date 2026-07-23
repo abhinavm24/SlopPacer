@@ -281,6 +281,11 @@ describe("popup backup import behavior", () => {
       expect(popup.dataStatus.textContent).toContain("Imported backup from");
     });
     expect(document.querySelector("#month-label")?.textContent).toBe("$400 / $2,400");
+    const rings = document.querySelector<HTMLElement>("#pace-rings");
+    expect(rings).not.toBeNull();
+    expect(
+      Number.parseFloat(rings!.style.getPropertyValue("--month-progress")),
+    ).toBeCloseTo((400 / 2_400) * 100);
     expect((document.querySelector('[name="claude"]') as HTMLInputElement).value).toBe("900");
     expect((document.querySelector('[name="syncMinutes"]') as HTMLInputElement).value).toBe("60");
     expect((document.querySelector('[name="retentionMonths"]') as HTMLInputElement).value).toBe("6");
