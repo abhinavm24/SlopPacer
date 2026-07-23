@@ -5,8 +5,8 @@ export interface PacingMetrics {
   averagePerElapsedDay: number;
   targetPerWorkingDay: number;
   requiredPerRemainingDay: number;
+  requiredPerRemainingDayAllDays: number;
   remainingPercent: number;
-  paceStatus: "under" | "on_pace" | "over";
 }
 
 function parseDate(value: string): Date {
@@ -29,6 +29,13 @@ export function countWorkingDays(start: string, end: string): number {
   return count;
 }
 
+export function countCalendarDays(start: string, end: string): number {
+  const first = parseDate(start);
+  const last = parseDate(end);
+  if (first > last) return 0;
+  return Math.round((last.getTime() - first.getTime()) / 86_400_000) + 1;
+}
+
 export function calculatePacing(
   used: number,
   budget: number,
@@ -42,13 +49,14 @@ export function calculatePacing(
   const totalWorkingDays = countWorkingDays(cycleStart, cycleEnd);
   const elapsedWorkingDays = today < cycleStart ? 0 : countWorkingDays(cycleStart, elapsedEnd);
   const remainingWorkingDays = today > cycleEnd ? 0 : countWorkingDays(remainingStart, cycleEnd);
+  const remainingCalendarDays = today > cycleEnd ? 0 : countCalendarDays(remainingStart, cycleEnd);
   const safeUsed = Math.max(0, used);
   const safeBudget = Math.max(0, budget);
   const remaining = Math.max(0, safeBudget - safeUsed);
   const targetPerWorkingDay = totalWorkingDays ? safeBudget / totalWorkingDays : 0;
   const averagePerElapsedDay = elapsedWorkingDays ? safeUsed / elapsedWorkingDays : 0;
   const requiredPerRemainingDay = remainingWorkingDays ? remaining / remainingWorkingDays : remaining;
-  const paceRatio = requiredPerRemainingDay > 0 ? averagePerElapsedDay / requiredPerRemainingDay : averagePerElapsedDay > 0 ? Infinity : 1;
+  const requiredPerRemainingDayAllDays = remainingCalendarDays ? remaining / remainingCalendarDays : remaining;
 
   return {
     totalWorkingDays,
@@ -57,9 +65,7 @@ export function calculatePacing(
     averagePerElapsedDay,
     targetPerWorkingDay,
     requiredPerRemainingDay,
+    requiredPerRemainingDayAllDays,
     remainingPercent: safeBudget ? (remaining / safeBudget) * 100 : 0,
-    paceStatus: elapsedWorkingDays === 0 || (paceRatio >= 0.9 && paceRatio <= 1.1)
-      ? "on_pace"
-      : paceRatio < 0.9 ? "under" : "over",
   };
 }
