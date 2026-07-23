@@ -13,6 +13,7 @@ import {
 } from "./messages";
 import { combineSnapshots } from "./normalization";
 import { calculatePacing, type PacingMetrics } from "./pacing";
+import { computeSummary, fillStatus, type SummaryBreakdown } from "./periods";
 import { PROVIDERS } from "./providers";
 import { PROVIDER_IDS, type ExtensionState, type ProviderId } from "./types";
 
@@ -46,15 +47,48 @@ function pacingText(pacing: PacingMetrics): string {
   return `Avg ${money(pacing.averagePerElapsedDay)}/day · Available ${money(pacing.requiredPerRemainingDay)}/day`;
 }
 
-function paceClass(pacing: PacingMetrics): string {
-  return `pace-${pacing.paceStatus.replace("_", "-")}`;
+function setFill(fill: HTMLElement, spent: number, target: number): void {
+  const value = target <= 0 ? (spent > 0 ? 100 : 0) : Math.max(0, Math.min(100, (spent / target) * 100));
+  fill.style.width = `${value}%`;
+  fill.className = `fill-${fillStatus(spent, target)}`;
+  fill.parentElement?.setAttribute("aria-valuenow", String(Math.round(value)));
 }
 
-function setBar(bar: HTMLElement, usedPercent: number, pacing: PacingMetrics): void {
-  const value = Math.max(0, Math.min(100, usedPercent));
-  bar.style.width = `${value}%`;
-  bar.className = paceClass(pacing);
-  bar.parentElement?.setAttribute("aria-valuenow", String(Math.round(value)));
+function setPeriodBar(fillId: string, labelId: string, spent: number, target: number): void {
+  setFill(document.querySelector<HTMLElement>(`#${fillId}`)!, spent, target);
+  document.querySelector(`#${labelId}`)!.textContent = `${money(spent)} / ${money(target)}`;
+}
+
+function renderSummary(summary: SummaryBreakdown | undefined): void {
+  const today = document.querySelector<HTMLElement>("#combined-today")!;
+  const days = document.querySelector<HTMLElement>("#summary-days")!;
+  const allowance = document.querySelector<HTMLElement>("#summary-allowance")!;
+  const foot = document.querySelector<HTMLElement>("#summary-foot")!;
+  if (!summary) {
+    today.textContent = "—";
+    days.textContent = "Current month";
+    allowance.textContent = "No usage yet";
+    foot.textContent = "";
+    for (const [fillId, labelId] of [
+      ["today-fill", "today-label"],
+      ["week-fill", "week-label"],
+      ["month-fill", "month-label"],
+    ] as const) {
+      const fill = document.querySelector<HTMLElement>(`#${fillId}`)!;
+      fill.style.width = "0%";
+      fill.className = "";
+      document.querySelector(`#${labelId}`)!.textContent = "";
+    }
+    return;
+  }
+  today.textContent = money(summary.todaySpent);
+  days.textContent = `${summary.remainingWorkingDays} days left`;
+  allowance.textContent =
+    `today · allowance ${money(summary.todayAllowance)} (${money(summary.todayAllowanceAllDays)})`;
+  setPeriodBar("today-fill", "today-label", summary.todaySpent, summary.todayAllowance);
+  setPeriodBar("week-fill", "week-label", summary.weekSpent, summary.weekTarget);
+  setPeriodBar("month-fill", "month-label", summary.monthSpent, summary.monthBudget);
+  foot.textContent = `proj ${money(summary.projectedMonth)} · left ${money(summary.left)}`;
 }
 
 function chevron(): SVGSVGElement {
@@ -136,26 +170,18 @@ function render(state: ExtensionState): void {
   const snapshots = PROVIDER_IDS.flatMap((id) => state.providers[id].snapshot ? [state.providers[id].snapshot!] : []);
   const combined = combineSnapshots(snapshots);
   const combinedBudget = PROVIDER_IDS.reduce((sum, id) => sum + state.providers[id].budgetUsd, 0);
-  const combinedRemaining = Math.max(0, combinedBudget - combined.usedUsd);
-  const combinedRemainingPercent = combinedBudget ? (combinedRemaining / combinedBudget) * 100 : 0;
   const cycle = snapshots[0];
-  const combinedPacing = cycle
-    ? calculatePacing(combined.usedUsd, combinedBudget, cycle.cycleStart, cycle.cycleEnd)
+  const summary = cycle
+    ? computeSummary(
+        PROVIDER_IDS.map((id) => state.providers[id].history),
+        combined.usedUsd,
+        combinedBudget,
+        cycle.cycleStart,
+        cycle.cycleEnd,
+      )
     : undefined;
 
-  document.querySelector("#combined-used")!.textContent = snapshots.length ? money(combined.usedUsd) : "—";
-  document.querySelector("#combined-limit")!.textContent = `of ${money(combinedBudget)}`;
-  document.querySelector("#summary-days")!.textContent = combinedPacing
-    ? `${combinedPacing.remainingWorkingDays} days left`
-    : "Current month";
-  const remaining = document.querySelector<HTMLElement>("#combined-remaining")!;
-  remaining.textContent = snapshots.length ? `${percent(combinedRemainingPercent)} remaining` : "No usage yet";
-  remaining.className = combinedPacing ? `summary-remaining ${paceClass(combinedPacing)}` : "summary-remaining";
-  const combinedBar = document.querySelector<HTMLElement>("#combined-bar")!;
-  if (combinedPacing) setBar(combinedBar, combinedBudget ? (combined.usedUsd / combinedBudget) * 100 : 0, combinedPacing);
-  document.querySelector("#summary-pacing")!.textContent = combinedPacing
-    ? `Avg ${money(combinedPacing.averagePerElapsedDay)}/day · Available ${money(combinedPacing.requiredPerRemainingDay)}/day`
-    : "No pacing yet";
+  renderSummary(summary);
 
   providersHost.replaceChildren(...PROVIDER_IDS.map((id) => {
     const provider = state.providers[id];
@@ -183,10 +209,11 @@ function render(state: ExtensionState): void {
 
     if (snapshot) {
       const pacing = calculatePacing(snapshot.equivalentUsedUsd, snapshot.budgetUsd, snapshot.cycleStart, snapshot.cycleEnd);
+      const status = fillStatus(snapshot.equivalentUsedUsd, snapshot.budgetUsd);
       const metrics = document.createElement("div");
       metrics.className = "provider-metrics";
       const remainingLabel = document.createElement("strong");
-      remainingLabel.className = paceClass(pacing);
+      remainingLabel.className = `text-${status}`;
       remainingLabel.textContent = `${percent(pacing.remainingPercent)} remaining`;
       const pace = document.createElement("span");
       pace.textContent = pacingText(pacing);
@@ -195,7 +222,7 @@ function render(state: ExtensionState): void {
       bar.setAttribute("role", "progressbar");
       bar.setAttribute("aria-label", `${PROVIDERS[id].name} budget used`);
       const fill = document.createElement("span");
-      setBar(fill, snapshot.utilizationPercent, pacing);
+      setFill(fill, snapshot.equivalentUsedUsd, snapshot.budgetUsd);
       bar.append(fill);
       metrics.append(remainingLabel, pace, bar);
       row.append(metrics);

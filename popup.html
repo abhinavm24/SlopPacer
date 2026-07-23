@@ -30,14 +30,25 @@
       <div id="overview-view" class="popup-view">
         <section class="summary" aria-label="Combined budget">
           <div class="summary-top">
-            <div><strong id="combined-used">—</strong><span id="combined-limit">of —</span></div>
+            <strong id="combined-today">—</strong>
             <span id="summary-days" class="summary-days">Current month</span>
           </div>
-          <div class="summary-metrics">
-            <span id="combined-remaining" class="summary-remaining">No usage yet</span>
-            <span id="summary-pacing" class="summary-pacing">No pacing yet</span>
+          <div id="summary-allowance" class="summary-allowance">No usage yet</div>
+          <div class="period-bars">
+            <div class="period">
+              <div class="period-head"><span>Today</span><span id="today-label" class="period-value"></span></div>
+              <div class="usage-bar period-bar" role="progressbar" aria-label="Today versus allowance"><span id="today-fill"></span></div>
+            </div>
+            <div class="period">
+              <div class="period-head"><span>Week</span><span id="week-label" class="period-value"></span></div>
+              <div class="usage-bar period-bar" role="progressbar" aria-label="This week versus weekly pace"><span id="week-fill"></span></div>
+            </div>
+            <div class="period">
+              <div class="period-head"><span>Month</span><span id="month-label" class="period-value"></span></div>
+              <div class="usage-bar period-bar" role="progressbar" aria-label="This month versus budget"><span id="month-fill"></span></div>
+            </div>
           </div>
-          <div class="usage-bar summary-bar" role="progressbar" aria-label="Combined budget used"><span id="combined-bar"></span></div>
+          <div id="summary-foot" class="summary-foot"></div>
         </section>
         <section id="providers" aria-label="Providers"></section>
       </div>
