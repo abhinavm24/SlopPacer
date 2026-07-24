@@ -48,8 +48,13 @@ function pacingText(pacing: PacingMetrics): string {
   return `Avg ${money(pacing.averagePerElapsedDay)}/day · Available ${money(pacing.requiredPerRemainingDay)}/day`;
 }
 
+function fillPercent(spent: number, target: number): number {
+  if (target <= 0) return spent > 0 ? 100 : 0;
+  return Math.max(0, Math.min(100, (spent / target) * 100));
+}
+
 function setFill(fill: HTMLElement, spent: number, target: number): void {
-  const value = target <= 0 ? (spent > 0 ? 100 : 0) : Math.max(0, Math.min(100, (spent / target) * 100));
+  const value = fillPercent(spent, target);
   fill.style.width = `${value}%`;
   fill.className = `fill-${fillStatus(spent, target)}`;
   fill.parentElement?.setAttribute("aria-valuenow", String(Math.round(value)));
@@ -65,8 +70,13 @@ function renderSummary(summary: SummaryBreakdown | undefined): void {
   const days = document.querySelector<HTMLElement>("#summary-days")!;
   const allowance = document.querySelector<HTMLElement>("#summary-allowance")!;
   const foot = document.querySelector<HTMLElement>("#summary-foot")!;
+  const rings = document.querySelector<HTMLElement>("#pace-rings")!;
   const caption = document.querySelector<HTMLElement>("#summary-caption")!;
   if (!summary) {
+    for (const period of ["today", "week", "month"]) {
+      rings.style.setProperty(`--${period}-progress`, "0%");
+      rings.style.setProperty(`--${period}-color`, "var(--green)");
+    }
     today.textContent = "—";
     days.textContent = "Current month";
     allowance.textContent = "No usage yet";
@@ -92,6 +102,14 @@ function renderSummary(summary: SummaryBreakdown | undefined): void {
   setPeriodBar("today-fill", "today-label", summary.todaySpent, summary.todayAllowance);
   setPeriodBar("week-fill", "week-label", summary.weekSpent, summary.weekTarget);
   setPeriodBar("month-fill", "month-label", summary.monthSpent, summary.monthBudget);
+  for (const [period, spent, target] of [
+    ["today", summary.todaySpent, summary.todayAllowance],
+    ["week", summary.weekSpent, summary.weekTarget],
+    ["month", summary.monthSpent, summary.monthBudget],
+  ] as const) {
+    rings.style.setProperty(`--${period}-progress`, `${fillPercent(spent, target)}%`);
+    rings.style.setProperty(`--${period}-color`, `var(--${fillStatus(spent, target)})`);
+  }
   foot.textContent = `proj ${money(summary.projectedMonth)} · left ${money(summary.left)}`;
   caption.hidden = false;
 }
