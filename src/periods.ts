@@ -14,6 +14,7 @@ export interface SummaryBreakdown {
   projectedMonth: number;
   left: number;
   remainingWorkingDays: number;
+  remainingWorkingPercent: number;
 }
 
 function dateKey(value: Date): string {
@@ -86,5 +87,9 @@ export function computeSummary(
     projectedMonth: pacing.averagePerElapsedDay * pacing.totalWorkingDays,
     left: Math.max(0, combinedBudget - monthSpent),
     remainingWorkingDays: pacing.remainingWorkingDays,
+    remainingWorkingPercent:
+      pacing.totalWorkingDays <= 0
+        ? 0
+        : (pacing.remainingWorkingDays / pacing.totalWorkingDays) * 100,
   };
 }

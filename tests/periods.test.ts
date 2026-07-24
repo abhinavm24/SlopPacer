@@ -45,6 +45,7 @@ describe("computeSummary", () => {
     expect(summary.monthBudget).toBe(2000);
     expect(summary.left).toBe(1000);
     expect(summary.remainingWorkingDays).toBe(11);
+    expect(summary.remainingWorkingPercent).toBeCloseTo((11 / 23) * 100);
   });
 
   it("uses workday allowance for today and a pace-based weekly target", () => {

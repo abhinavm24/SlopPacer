@@ -281,6 +281,9 @@ describe("popup backup import behavior", () => {
       expect(popup.dataStatus.textContent).toContain("Imported backup from");
     });
     expect(document.querySelector("#month-label")?.textContent).toBe("$400 / $2,400");
+    expect(document.querySelector("#summary-days")?.textContent).toMatch(
+      /^\d+ workdays · \d+%$/,
+    );
     const rings = document.querySelector<HTMLElement>("#pace-rings");
     expect(rings).not.toBeNull();
     expect(

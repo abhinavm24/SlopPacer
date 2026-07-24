@@ -34,6 +34,9 @@
               <span class="pace-ring pace-ring-month"></span>
               <span class="pace-ring pace-ring-week"></span>
               <span class="pace-ring pace-ring-today"></span>
+              <span class="pace-ring-label pace-ring-label-month">M</span>
+              <span class="pace-ring-label pace-ring-label-week">W</span>
+              <span class="pace-ring-label pace-ring-label-day">D</span>
               <span class="pace-ring-center">Pace</span>
             </div>
             <div class="summary-primary">
@@ -60,7 +63,6 @@
               <div class="usage-bar period-bar" role="progressbar" aria-label="This month versus budget"><span id="month-fill"></span></div>
             </div>
           </div>
-          <p id="summary-caption" class="summary-caption" hidden>allowance = safe to spend today (over remaining workdays; bracket = over all days) · proj = projected month-end at current pace · left = budget − month-to-date</p>
         </section>
         <section id="providers" aria-label="Providers"></section>
       </div>
@@ -111,15 +113,15 @@
         <div class="howto-content">
           <section>
             <h2>Collects usage</h2>
-            <p>Reads your month-to-date usage from Claude, ChatGPT, and Cursor's own Usage pages via your signed-in browser sessions — no API keys. It reuses an open Usage tab or briefly opens and closes one; Cursor is shown for a moment because its dashboard won't load while hidden (scheduled refreshes do this only if enabled in Settings). Refreshes on your chosen interval (15 min default).</p>
+            <p>Reads your month-to-date usage from Claude, ChatGPT, and Cursor's own Usage pages via your signed-in browser sessions — no API keys. It reuses an open Usage tab or briefly opens and closes one. Cursor is shown for a moment because its dashboard won't load while hidden.</p>
           </section>
           <section>
             <h2>Tracks against budget</h2>
-            <p>Each provider's spend is normalized against its monthly budget and combined; Cursor credits are converted to dollars.</p>
+            <p>Combines provider spend against monthly budgets; Cursor credits convert to dollars.</p>
           </section>
           <section>
-            <h2>Splits spend by period</h2>
-            <p>The summary shows <strong>Today</strong>, <strong>Week</strong> (Mon–Fri), and <strong>Month</strong> spend. <strong>allowance</strong> is what's safe to spend today — budget left ÷ remaining workdays (bracket: ÷ all remaining days). <strong>proj</strong> is projected month-end at your current workday pace; <strong>left</strong> is budget minus month-to-date. Each provider row also shows its % remaining and average/available per workday.</p>
+            <h2>Shows your pace</h2>
+            <p>Today, workweek, and month show spend against pace, projection, and budget left.</p>
           </section>
           <section>
             <h2>Stays local</h2>
