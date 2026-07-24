@@ -71,6 +71,7 @@ function renderSummary(summary: SummaryBreakdown | undefined): void {
   const allowance = document.querySelector<HTMLElement>("#summary-allowance")!;
   const foot = document.querySelector<HTMLElement>("#summary-foot")!;
   const rings = document.querySelector<HTMLElement>("#pace-rings")!;
+  const caption = document.querySelector<HTMLElement>("#summary-caption")!;
   if (!summary) {
     for (const period of ["today", "week", "month"]) {
       rings.style.setProperty(`--${period}-progress`, "0%");
@@ -80,6 +81,7 @@ function renderSummary(summary: SummaryBreakdown | undefined): void {
     days.textContent = "Current month";
     allowance.textContent = "No usage yet";
     foot.textContent = "";
+    caption.hidden = true;
     for (const [fillId, labelId] of [
       ["today-fill", "today-label"],
       ["week-fill", "week-label"],
@@ -109,6 +111,7 @@ function renderSummary(summary: SummaryBreakdown | undefined): void {
     rings.style.setProperty(`--${period}-color`, `var(--${fillStatus(spent, target)})`);
   }
   foot.textContent = `proj ${money(summary.projectedMonth)} · left ${money(summary.left)}`;
+  caption.hidden = false;
 }
 
 function chevron(): SVGSVGElement {
