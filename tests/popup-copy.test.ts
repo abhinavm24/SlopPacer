@@ -9,11 +9,16 @@ describe("concise popup copy", () => {
     expect(popup).not.toContain("allowance = safe to spend today");
   });
 
-  it("keeps four concise How It Works topics", () => {
-    expect(popup).toContain("Uses signed-in usage pages");
+  it("keeps four How It Works topics with collection and privacy details", () => {
+    expect(popup.match(/<section>\s*<h2>/g)).toHaveLength(4);
+    expect(popup).toContain("Reads your month-to-date usage");
+    expect(popup).toContain("It reuses an open Usage tab or briefly opens and closes one");
+    expect(popup).toContain("Cursor is shown for a moment");
     expect(popup).toContain("Combines provider spend");
     expect(popup).toContain("Today, workweek, and month");
-    expect(popup).toContain("backup controls live in Settings");
+    expect(popup).toContain("cookies, tokens, and raw responses are never saved");
+    expect(popup).toContain("Settings can export or restore a local backup");
+    expect(popup).toContain("replacing current data after confirmation");
   });
 
   it("labels the day, week, and month pace rings", () => {
