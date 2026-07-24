@@ -341,13 +341,6 @@ input:focus-visible,
   margin-top: 3px;
 }
 
-.summary-caption {
-  margin: 8px 0 0;
-  color: var(--secondary);
-  font-size: 10px;
-  line-height: 1.4;
-}
-
 .usage-bar {
   width: 100%;
   height: 5px;
@@ -682,9 +675,12 @@ input:focus-visible,
   font-size: 13px;
 }
 
-#settings-view,
-#howto-view {
+#settings-view {
   overflow-y: auto;
+}
+
+#howto-view {
+  overflow: hidden;
 }
 
 .popup-form {
@@ -839,12 +835,12 @@ input:focus-visible,
 
 .howto-content {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   padding: 12px;
 }
 
 .howto-content section {
-  padding: 13px 14px;
+  padding: 11px 13px;
   border-radius: var(--group-radius);
 }
 
