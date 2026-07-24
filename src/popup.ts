@@ -94,7 +94,8 @@ function renderSummary(summary: SummaryBreakdown | undefined): void {
     return;
   }
   today.textContent = money(summary.todaySpent);
-  days.textContent = `${summary.remainingWorkingDays} days left`;
+  days.textContent =
+    `${summary.remainingWorkingDays} workdays · ${percent(summary.remainingWorkingPercent)}`;
   allowance.textContent =
     `today · allowance ${money(summary.todayAllowance)} (${money(summary.todayAllowanceAllDays)})`;
   setPeriodBar("today-fill", "today-label", summary.todaySpent, summary.todayAllowance);

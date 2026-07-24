@@ -15,4 +15,10 @@ describe("concise popup copy", () => {
     expect(popup).toContain("Today, workweek, and month");
     expect(popup).toContain("backup controls live in Settings");
   });
+
+  it("labels the day, week, and month pace rings", () => {
+    expect(popup).toContain('class="pace-ring-label pace-ring-label-day">D</span>');
+    expect(popup).toContain('class="pace-ring-label pace-ring-label-week">W</span>');
+    expect(popup).toContain('class="pace-ring-label pace-ring-label-month">M</span>');
+  });
 });

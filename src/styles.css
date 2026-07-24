@@ -26,7 +26,7 @@
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.06);
   --shadow-control: 0 1px 3px rgba(0, 0, 0, 0.16);
   color: var(--text);
-  background: var(--canvas);
+  background: transparent;
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
   font-synthesis: none;
 }
@@ -45,7 +45,7 @@
 
 body {
   margin: 0;
-  background: var(--canvas);
+  background: transparent;
 }
 
 button,
@@ -82,6 +82,7 @@ input:focus-visible,
   width: 410px;
   height: 596px;
   overflow: hidden;
+  border-radius: 18px;
   background: var(--canvas);
 }
 
@@ -239,11 +240,36 @@ input:focus-visible,
   animation-delay: 100ms;
 }
 
+.pace-ring-label,
+.pace-ring-center {
+  font-family: "SF Pro Rounded", ui-rounded, -apple-system, sans-serif;
+}
+
+.pace-ring-label {
+  position: absolute;
+  z-index: 2;
+  left: 50%;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--card);
+  box-shadow: 0 0 0 0.5px var(--separator);
+  color: var(--secondary);
+  font-size: 8px;
+  font-weight: 750;
+  line-height: 12px;
+  text-align: center;
+  transform: translateX(-50%);
+}
+
+.pace-ring-label-month { top: -2px; }
+.pace-ring-label-week { top: 12px; }
+.pace-ring-label-day { top: 26px; }
+
 .pace-ring-center {
   position: absolute;
   inset: 44px 0 auto;
   color: var(--tertiary);
-  font-family: "SF Pro Rounded", ui-rounded, -apple-system, sans-serif;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -294,11 +320,13 @@ input:focus-visible,
 }
 
 .summary-days {
+  max-width: 104px;
   margin-left: auto;
   color: var(--secondary);
   font-size: 11px;
   font-weight: 550;
-  white-space: nowrap;
+  line-height: 1.15;
+  text-align: right;
 }
 
 .summary-allowance,
