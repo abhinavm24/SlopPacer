@@ -65,11 +65,13 @@ function renderSummary(summary: SummaryBreakdown | undefined): void {
   const days = document.querySelector<HTMLElement>("#summary-days")!;
   const allowance = document.querySelector<HTMLElement>("#summary-allowance")!;
   const foot = document.querySelector<HTMLElement>("#summary-foot")!;
+  const caption = document.querySelector<HTMLElement>("#summary-caption")!;
   if (!summary) {
     today.textContent = "—";
     days.textContent = "Current month";
     allowance.textContent = "No usage yet";
     foot.textContent = "";
+    caption.hidden = true;
     for (const [fillId, labelId] of [
       ["today-fill", "today-label"],
       ["week-fill", "week-label"],
@@ -91,6 +93,7 @@ function renderSummary(summary: SummaryBreakdown | undefined): void {
   setPeriodBar("week-fill", "week-label", summary.weekSpent, summary.weekTarget);
   setPeriodBar("month-fill", "month-label", summary.monthSpent, summary.monthBudget);
   foot.textContent = `proj ${money(summary.projectedMonth)} · left ${money(summary.left)}`;
+  caption.hidden = false;
 }
 
 function chevron(): SVGSVGElement {
